@@ -1,0 +1,263 @@
+{
+  "1532595942996312205": {
+    "name": "puppyhop",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 0,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532595975011569674": {
+    "name": "baddies",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 1,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596003474116758": {
+    "name": "fkn0wned",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 2,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596179504857148": {
+    "name": "Forza Belgica",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 8,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596264720662579": {
+    "name": "nire",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 11,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596406316040332": {
+    "name": "insanekids",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 15,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596503447867434": {
+    "name": "☚(° ヮ◠☚)",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 16,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596589837811803": {
+    "name": "эмо",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 17,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596625791520898": {
+    "name": "boys who love each other",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 18,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596659253411890": {
+    "name": "kitten",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 19,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596708775559339": {
+    "name": "Agency",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 20,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532596811552788611": {
+    "name": "ebal rot absolute",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 21,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544395599191736420": {
+    "name": "asdasd",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 25,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1021779804023947366": {
+    "name": "Metin Kanalları",
+    "type": "text",
+    "guild_id": 1021779804023947365,
+    "category_id": null,
+    "position": 0,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1021779804023947368": {
+    "name": "genel",
+    "type": "text",
+    "guild_id": 1021779804023947365,
+    "category_id": 1021779804023947366,
+    "position": 0,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1532595887199490200": {
+    "name": ".",
+    "type": "text",
+    "guild_id": 1021779804023947365,
+    "category_id": null,
+    "position": 1,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544394903071756408": {
+    "name": "asdasd",
+    "type": "text",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 3,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544396492868034571": {
+    "name": "breakwhore",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 24,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544396504137998416": {
+    "name": "wanna e-date?",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 23,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544396709621276772": {
+    "name": "WE HATE CHEATERS",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 13,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544412729513746554": {
+    "name": "rules",
+    "guild_id": 1021779804023947365,
+    "category_id": null,
+    "position": 0,
+    "bitrate": 0,
+    "user_limit": 0
+  },
+  "1544429042101522482": {
+    "name": "uwu",
+    "guild_id": 1021779804023947365,
+    "category_id": 1021779804023947366,
+    "position": 5,
+    "bitrate": 0,
+    "user_limit": 0
+  },
+  "1544433083762348104": {
+    "name": "Against All Nerds",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 6,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544447380282413110": {
+    "name": "Evangelion",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 5,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544452076325572639": {
+    "name": "log",
+    "guild_id": 1021779804023947365,
+    "category_id": null,
+    "position": 7,
+    "bitrate": 0,
+    "user_limit": 0
+  },
+  "1544453047311401033": {
+    "name": "chat",
+    "guild_id": 1021779804023947365,
+    "category_id": 1021779804023947366,
+    "position": 7,
+    "bitrate": 0,
+    "user_limit": 0
+  },
+  "1544453229109190710": {
+    "name": "Dupa",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 10,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544453295949484137": {
+    "name": "Breakcore",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 9,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544454995502436422": {
+    "name": "Ganja",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 24,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544455029283627080": {
+    "name": "Nice Dick",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 14,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544455048724095057": {
+    "name": "i smoke weed all the time",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 12,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544458431291854978": {
+    "name": "welcome",
+    "type": "text",
+    "guild_id": 1021779804023947365,
+    "category_id": null,
+    "position": 1,
+    "bitrate": 64000,
+    "user_limit": 0
+  }
+}
