@@ -895,41 +895,27 @@ async def auto_repair_loop():
 STAY_VOICE_CHANNEL_ID = 1532596503447867434  # Botun 7/24 kalacağı ses kanalı
 
 async def ensure_voice_connection():
-    """Botun belirlenen ses kanalında (1532596503447867434) kalmasını sağlar (Müzik çalmıyorsa)."""
+    """Bot hiçbir seste değilse 7/24 kalacağı odaya bağlanır. Asla odayı zorla değiştirmez."""
     try:
         channel = bot.get_channel(STAY_VOICE_CHANNEL_ID)
         if channel and isinstance(channel, discord.VoiceChannel):
             guild = channel.guild
             vc = guild.voice_client
             
-            # 1. Eğer müzik sistemi aktifse veya kullanıcı odada botla beraberse ASLA dokunma!
-            g_data = music_queues.get(guild.id)
-            if g_data and g_data.get("active_user_id"):
-                return
-            if vc and (vc.is_playing() or vc.is_paused()):
-                return
-            if g_data and (g_data.get("queue") or g_data.get("current")):
+            # Bot şu an herhangi bir ses kanalına bağlıysa (hangi kanal olursa olsun) ASLA taşıma/dokunma!
+            if vc and vc.is_connected():
                 return
 
-            # 2. Eğer bot zaten bağlıysa ve bulunduğu kanalda başka üyeler varsa dokunma
-            if vc and vc.is_connected() and vc.channel.id != STAY_VOICE_CHANNEL_ID:
-                non_bot_members = [m for m in vc.channel.members if not m.bot]
-                if len(non_bot_members) > 0:
-                    return
-
-            if not vc or not vc.is_connected():
-                await channel.connect(self_deaf=True, self_mute=False)
-                print(f"🔊 [Ses Odası] Bot #{channel.name} (`{channel.id}`) kanalına bağlandı (Kulaklık kapalı, mikrofon açık).", flush=True)
-            elif vc.channel.id != STAY_VOICE_CHANNEL_ID:
-                await vc.move_to(channel)
-                print(f"🔊 [Ses Odası] Bot #{channel.name} kanalına taşındı.", flush=True)
+            # Bot sesten tamamen düştüyse veya hiç bağlanmadıysa odaya gir
+            await channel.connect(self_deaf=True, self_mute=False)
+            print(f"🔊 [Ses Odası] Bot #{channel.name} (`{channel.id}`) kanalına bağlandı.", flush=True)
     except Exception as e:
         print(f"⚠️ Ses kanalına bağlanırken hata: {e}", flush=True)
 
 
 @tasks.loop(seconds=30)
 async def voice_keepalive_loop():
-    """Bot sesten düşerse her 30 saniyede bir kontrol edip odaya geri sokar."""
+    """Bot sesten tamamen düşerse kontrol edip odaya sokar."""
     if bot.is_ready():
         await ensure_voice_connection()
 
