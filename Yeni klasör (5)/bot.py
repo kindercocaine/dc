@@ -1,10 +1,32 @@
 import os
 import sys
+import subprocess
+
+# ──────────────────────────────────────────────
+# GEREKLİ KÜTÜPHANELERİ OTOMATİK KONTROL ET VE İNDİR
+# ──────────────────────────────────────────────
+REQUIRED_PACKAGES = [
+    ("discord", "discord.py>=2.3.2"),
+    ("dotenv", "python-dotenv>=1.0.1"),
+    ("nacl", "PyNaCl>=1.5.0"),
+    ("yt_dlp", "yt-dlp>=2025.1.26"),
+    ("spotipy", "spotipy>=2.24.0"),
+    ("aiohttp", "aiohttp>=3.9.5")
+]
+
+for import_name, install_pkg in REQUIRED_PACKAGES:
+    try:
+        __import__(import_name)
+    except ImportError:
+        print(f"📦 '{install_pkg}' kütüphanesi eksik, otomatik kuruluyor...", flush=True)
+        subprocess.check_call([sys.executable, "-m", "pip", "install", install_pkg])
+
 import json
 import time
 import re
 import asyncio
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -64,56 +86,6 @@ def save_config(cfg: dict):
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
 
-def load_authorized() -> list[int]:
-    """Yetkili ID listesini önbellekten/diskten hızlıca yükler."""
-    global _cached_auth
-    if _cached_auth is not None:
-        return _cached_auth
-    if os.path.exists(AUTH_FILE):
-        try:
-            with open(AUTH_FILE, "r", encoding="utf-8") as f:
-                _cached_auth = json.load(f)
-                return _cached_auth
-        except Exception:
-            _cached_auth = []
-            return _cached_auth
-    _cached_auth = []
-    return _cached_auth
-
-
-def save_authorized(ids: list[int]):
-    """Yetkili ID listesini kaydeder ve önbelleği günceller."""
-    global _cached_auth
-    _cached_auth = ids
-    with open(AUTH_FILE, "w", encoding="utf-8") as f:
-        json.dump(ids, f, indent=2)
-
-
-def load_kurucu() -> list[int]:
-    """Kurucu ID listesini önbellekten/diskten hızlıca yükler."""
-    global _cached_kurucu
-    if _cached_kurucu is not None:
-        return _cached_kurucu
-    if os.path.exists(KURUCU_FILE):
-        try:
-            with open(KURUCU_FILE, "r", encoding="utf-8") as f:
-                _cached_kurucu = json.load(f)
-                return _cached_kurucu
-        except Exception:
-            _cached_kurucu = []
-            return _cached_kurucu
-    _cached_kurucu = []
-    return _cached_kurucu
-
-
-def save_kurucu(ids: list[int]):
-    """Kurucu ID listesini kaydeder ve önbelleği günceller."""
-    global _cached_kurucu
-    _cached_kurucu = ids
-    with open(KURUCU_FILE, "w", encoding="utf-8") as f:
-        json.dump(ids, f, indent=2)
-
-
 def load_sesyt() -> list[int]:
     """Ses yetkilisi (.sesyt) ID listesini önbellekten/diskten hızlıca yükler."""
     global _cached_sesyt
@@ -140,27 +112,23 @@ def save_sesyt(ids: list[int]):
 
 
 def is_allah(user_id: int) -> bool:
-    """Allah mı?"""
+    """Tek ve mutlak bot yöneticisi mi?"""
     return user_id == ALLAH_ID
 
 
 def is_kurucu(user_id: int) -> bool:
-    """Kurucu mu? (Allah dahil)"""
-    if is_allah(user_id):
-        return True
-    return user_id in load_kurucu()
+    """Eski uyumluluk için: Sadece Allah"""
+    return is_allah(user_id)
 
 
 def is_full_authorized(user_id: int) -> bool:
-    """Tam yetkili mi? (Allah + Kurucu + .yt)"""
-    if is_allah(user_id) or is_kurucu(user_id):
-        return True
-    return user_id in load_authorized()
+    """Eski uyumluluk için: Sadece Allah"""
+    return is_allah(user_id)
 
 
 def is_sesyt(user_id: int) -> bool:
-    """Ses yetkisi var mı? (Allah + Kurucu + .yt + .sesyt)"""
-    if is_full_authorized(user_id):
+    """Ses yetkisi var mı? (Allah + .sesyt)"""
+    if is_allah(user_id):
         return True
     return user_id in load_sesyt()
 
@@ -172,9 +140,8 @@ def is_authorized(user_id: int) -> bool:
 
 def member_has_perm(member: discord.Member) -> bool:
     """Üyenin botta veya sunucuda herhangi bir yetkisi/rolü var mı?"""
-    if is_authorized(member.id) or member.guild_permissions.administrator or member.guild_permissions.manage_guild or member.guild_permissions.manage_roles or member.guild_permissions.ban_members or member.guild_permissions.kick_members or member.guild_permissions.manage_channels:
+    if is_authorized(member.id) or member.guild_permissions.administrator:
         return True
-    # Default @everyone rolü haricinde özel bir rolü var mı? (Kayıtsız hariç)
     special_roles = [r for r in member.roles if r != member.guild.default_role and r.id != UNREGISTERED_ROLE_ID]
     return len(special_roles) > 0
 
@@ -192,13 +159,11 @@ bot = commands.Bot(command_prefix=[".", "!"], intents=intents)
 # ──────────────────────────────────────────────
 
 def create_welcome_embed(member: discord.Member) -> discord.Embed:
-    """Sol şeritsiz sade katıldı embed'i."""
+    """Sade katıldı embed'i (Renksiz, şeritsiz, butonsuz)."""
     embed = discord.Embed(
-        description=f"{member.mention} sunucuya katıldı",
-        color=0x242429
+        description=f"{member.mention} sunucuya katıldı"
     )
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_footer(text=f"ID: {member.id}")
     return embed
 
 
@@ -320,10 +285,9 @@ class KayitView(discord.ui.View):
 
 
 def create_exit_embed(member: discord.Member) -> discord.Embed:
-    """Sol şeritsiz sade ayrıldı embed'i."""
+    """Sade ayrıldı embed'i (Renksiz, şeritsiz)."""
     embed = discord.Embed(
-        description=f"{member.mention} sunucudan ayrıldı",
-        color=0x242429
+        description=f"{member.mention} sunucudan ayrıldı"
     )
     embed.set_thumbnail(url=member.display_avatar.url)
     return embed
@@ -335,43 +299,25 @@ async def lock_and_grant_channel(channel: discord.TextChannel):
     Kanalı kilitler (@everyone ve yetkililer dahil kimse mesaj yazamaz, butonla kayıt ve bot mesajı için temiz kalır),
     Herkes sadece görebilir ve okuyabilir.
     """
-    auth_ids = set(load_authorized()) | set(load_kurucu())
-    auth_ids.add(ALLAH_ID)
-
-    everyone_overwrite = channel.overwrites_for(channel.guild.default_role)
-    everyone_overwrite.send_messages = False
-    everyone_overwrite.add_reactions = False
-    everyone_overwrite.view_channel = True  # Herkes gelen/gideni görebilir ama yazamaz
-    try:
-        await channel.set_permissions(channel.guild.default_role, overwrite=everyone_overwrite)
-    except Exception as e:
-        print(f"⚠️ @everyone kilitlenemedi: {e}", flush=True)
-
-    for uid in auth_ids:
-        member = channel.guild.get_member(uid)
-        if member:
-            overwrite = channel.overwrites_for(member)
-            overwrite.view_channel = True
-            # Welcome dışı her yere yazabilsinler dediği için welcome'da mesaj yazma kapalı
-            overwrite.send_messages = False
-            overwrite.read_message_history = True
-            # Welcome kanalında SADECE ALLAH mesaj silebilir
-            overwrite.manage_messages = is_allah(uid)
-            try:
-                await channel.set_permissions(member, overwrite=overwrite)
-            except Exception as e:
-                print(f"⚠️ Kanal yetkisi verilemedi ({channel.name} -> {member.name}): {e}", flush=True)
+    owner_member = channel.guild.get_member(ALLAH_ID)
+    if owner_member:
+        overwrite = channel.overwrites_for(owner_member)
+        overwrite.view_channel = True
+        overwrite.send_messages = True
+        overwrite.read_message_history = True
+        overwrite.manage_messages = True
+        try:
+            await channel.set_permissions(owner_member, overwrite=overwrite)
+        except Exception as e:
+            print(f"⚠️ Kanal yetkisi verilemedi ({channel.name} -> {owner_member.name}): {e}", flush=True)
 
 
 async def lock_and_grant_private_channel(channel: discord.TextChannel):
     """
     ÖZEL Kanallar (Exit / Log vb.):
     @everyone için kanalı GİZLER (view_channel = False).
-    Sadece Allah, Kurucu ve Yetkililere görünür ve mesaj yazma/okuma hakkı verir.
+    Sadece bot sahibine (ALLAH_ID) tam erişim verir.
     """
-    auth_ids = set(load_authorized()) | set(load_kurucu())
-    auth_ids.add(ALLAH_ID)
-
     # 1. @everyone için tamamen görünmez yap
     everyone_overwrite = channel.overwrites_for(channel.guild.default_role)
     everyone_overwrite.view_channel = False
@@ -382,44 +328,30 @@ async def lock_and_grant_private_channel(channel: discord.TextChannel):
     except Exception as e:
         print(f"⚠️ Özel kanalda @everyone kısıtlanamadı: {e}", flush=True)
 
-    # 2. Yetkili olanlara tam erişim (görme + okuma + yazma) ver
-    cfg = load_config()
-    exit_id = cfg.get("exit_channel_id")
-    is_exit_channel = (exit_id and str(channel.id) == str(exit_id))
-    ch_name_lower = channel.name.lower()
-    can_delete_msg_names = ("chat", "sohbet", "genel", "uwu")
-
-    for uid in auth_ids:
-        member = channel.guild.get_member(uid)
-        if member:
-            overwrite = channel.overwrites_for(member)
-            overwrite.view_channel = True
-            overwrite.send_messages = True
-            overwrite.read_message_history = True
-
-            # Exit kanalında SADECE ALLAH mesaj silebilir
-            if is_exit_channel:
-                overwrite.manage_messages = is_allah(uid)
-            elif is_allah(uid) or is_kurucu(uid):
-                overwrite.manage_messages = True
-            else:
-                overwrite.manage_messages = any(k in ch_name_lower for k in can_delete_msg_names)
-
-            try:
-                await channel.set_permissions(member, overwrite=overwrite)
-            except Exception as e:
-                print(f"⚠️ Özel kanal yetkisi verilemedi ({channel.name} -> {member.name}): {e}", flush=True)
+    # 2. Bot sahibine tam erişim ver
+    owner_member = channel.guild.get_member(ALLAH_ID)
+    if owner_member:
+        overwrite = channel.overwrites_for(owner_member)
+        overwrite.view_channel = True
+        overwrite.send_messages = True
+        overwrite.read_message_history = True
+        overwrite.manage_messages = True
+        try:
+            await channel.set_permissions(owner_member, overwrite=overwrite)
+        except Exception as e:
+            print(f"⚠️ Özel kanal yetkisi verilemedi ({channel.name} -> {owner_member.name}): {e}", flush=True)
 
 
 async def configure_unregistered_role_permissions(guild: discord.Guild):
     """
-    Kayıtsız Rolü (1544413431409410058) Kanal İzinleri:
-    - Sadece #welcome ve #rules kanallarını görebilir ve okuyabilir.
-    - Diğer TÜM kanallar (metin, ses, kategoriler) kayıtsız rolüne tamamen gizlenir.
+    Kayıtsız Rolü (1544413431409410058) ve @everyone Varsayılan Kanal İzinleri:
+    - Bot kapalı (offline) olsa bile permsiz insanlar:
+      * HİÇBİR metin kanalını göremez (Sadece kurallar ve welcome açık kalır).
+      * Ses kanallarını görebilir (view_channel=True) ama HİÇBİRİNE KATILAMAZ (connect=False).
+    - Bot koruması olmasa dahi bu ayarlar doğrudan kanal izin tablosuna (overwrite) işlendiği için bot kapalıyken de %100 aktiftir.
     """
     unreg_role = guild.get_role(UNREGISTERED_ROLE_ID)
-    if not unreg_role:
-        return
+    everyone_role = guild.default_role
 
     cfg = load_config()
     allowed_channel_ids = set()
@@ -432,44 +364,51 @@ async def configure_unregistered_role_permissions(guild: discord.Guild):
         try: allowed_channel_ids.add(int(r_id))
         except ValueError: pass
 
-    # 1. Kategoriler için izinler (Kayıtsızlar kategoriyi görebilir ama içindeki kilitli kanalları göremez)
+    # 1. Kategoriler için izinler:
+    # @everyone ve Kayıtsız rolü için kategoriyi görebilir ama içindeki kilitli metin kanallarını göremez
     for category in guild.categories:
         try:
-            cat_over = category.overwrites_for(unreg_role)
-            cat_over.view_channel = True
-            await category.set_permissions(unreg_role, overwrite=cat_over)
+            for role in (unreg_role, everyone_role):
+                if role:
+                    cat_over = category.overwrites_for(role)
+                    cat_over.view_channel = True
+                    await category.set_permissions(role, overwrite=cat_over)
         except Exception:
             pass
 
-    # 2. Metin kanalları için izinler
+    # 2. Metin kanalları için izinler:
+    # Permsiz / yetkisiz insanlar (@everyone ve kayıtsızlar) sadece welcome/rules görebilir, diğer hiçbir metin kanalını göremez!
     for channel in guild.text_channels:
         try:
-            over = channel.overwrites_for(unreg_role)
-            if channel.id in allowed_channel_ids:
-                over.view_channel = True
-                over.read_message_history = True
-                over.send_messages = False
-                over.add_reactions = False
-            else:
-                over.view_channel = False
-                over.send_messages = False
-            await channel.set_permissions(unreg_role, overwrite=over)
+            for role in (unreg_role, everyone_role):
+                if role:
+                    over = channel.overwrites_for(role)
+                    if channel.id in allowed_channel_ids:
+                        over.view_channel = True
+                        over.read_message_history = True
+                        over.send_messages = False
+                        over.add_reactions = False
+                    else:
+                        # Hiçbir kanalı göremez
+                        over.view_channel = False
+                        over.send_messages = False
+                    await channel.set_permissions(role, overwrite=over)
         except Exception:
             pass
 
     # 3. Ses kanalları için izinler:
-    # İçinde üye olan ses kanalını kayıtsızlar görebilir (view_channel=True) ama giremez (connect=False)
-    # Boş olan ses kanallarını kayıtsızlar kesinlikle göremez (view_channel=False)
+    # Kayıtsız permi olanlar ve @everyone boş ses kanallarını GÖREMEZ (view_channel=False).
+    # İçinde bot veya üye olan ses kanallarını GÖRÜR (view_channel=True) ama KATILAMAZ (connect=False).
     for channel in guild.voice_channels:
         try:
-            over = channel.overwrites_for(unreg_role)
-            if len(channel.members) > 0:
-                over.view_channel = True
-                over.connect = False
-            else:
-                over.view_channel = False
-                over.connect = False
-            await channel.set_permissions(unreg_role, overwrite=over)
+            has_someone = (len(channel.members) > 0)
+            for role in (unreg_role, everyone_role):
+                if role:
+                    over = channel.overwrites_for(role)
+                    over.view_channel = has_someone
+                    over.connect = False
+                    over.speak = False
+                    await channel.set_permissions(role, overwrite=over)
         except Exception:
             pass
 
@@ -551,54 +490,49 @@ async def sync_voice_permissions(guild: discord.Guild):
     await configure_unregistered_role_permissions(guild)
     await configure_registered_role_permissions(guild)
 
-    full_auth_ids = set(load_authorized()) | set(load_kurucu())
-    full_auth_ids.add(ALLAH_ID)
+    owner_id = ALLAH_ID
     sesyt_ids = set(load_sesyt())
+    all_voice_auths = {owner_id} | sesyt_ids
 
-    all_voice_auths = full_auth_ids | sesyt_ids
-
-    # Kategorileri kontrol et (Sadece tam yetkililer kategori üzerinden ses açabilir)
-    for category in guild.categories:
-        is_protected = (category.id == PROTECTED_CATEGORY_ID)
-        for uid in full_auth_ids:
-            if is_allah(uid) or is_kurucu(uid):
-                continue
-            member = guild.get_member(uid)
-            if member:
-                cat_over = category.overwrites_for(member)
-                old_pair = cat_over.pair()
-                if is_protected:
-                    cat_over.manage_channels = False
-                    cat_over.manage_permissions = False
-                else:
-                    cat_over.manage_channels = True
-                if cat_over.pair() != old_pair:
-                    try:
-                        await category.set_permissions(member, overwrite=cat_over)
-                    except Exception:
-                        pass
+    # Kategorileri kontrol et (Sadece bot sahibi kategori yönetebilir)
+    owner_member = guild.get_member(owner_id)
+    if owner_member:
+        for category in guild.categories:
+            cat_over = category.overwrites_for(owner_member)
+            old_pair = cat_over.pair()
+            cat_over.manage_channels = True
+            if cat_over.pair() != old_pair:
+                try:
+                    await category.set_permissions(owner_member, overwrite=cat_over)
+                except Exception:
+                    pass
 
     # Ses kanallarını denetle
     for channel in guild.voice_channels:
-        is_in_protected = (channel.category_id == PROTECTED_CATEGORY_ID)
+        # Eski yetkililerden kalan ve artık yetkili olmayan üyelerin özel izinlerini temizle
+        for target, overwrite in list(channel.overwrites.items()):
+            if isinstance(target, discord.Member):
+                if target.id not in all_voice_auths and not target.bot:
+                    try:
+                        await channel.set_permissions(target, overwrite=None)
+                    except Exception:
+                        pass
+
         for uid in all_voice_auths:
             member = guild.get_member(uid)
             if member:
                 overwrite = channel.overwrites_for(member)
                 old_pair = overwrite.pair()
-                # .sesyt ve .yt için mute, deafen, move (bağlantı kesme)
+                # .sesyt için mute, deafen, move (sağ tık yetkileri)
                 overwrite.mute_members = True
                 overwrite.deafen_members = True
                 overwrite.move_members = True
                 
-                # Sadece full_auth (.yt) olanlar kanal yönetebilir (eğer korumalı alanda değilse)
-                if uid in full_auth_ids and not is_in_protected:
+                # Sadece bot sahibi kanalları yönetebilir
+                if uid == owner_id:
                     overwrite.manage_channels = True
                 else:
                     overwrite.manage_channels = False
-
-                if is_allah(uid) or is_kurucu(uid):
-                    overwrite.manage_channels = True
 
                 if overwrite.pair() != old_pair:
                     try:
@@ -607,35 +541,73 @@ async def sync_voice_permissions(guild: discord.Guild):
                         print(f"⚠️ Ses izni verilemedi ({channel.name} -> {member.name}): {e}", flush=True)
 
     # Metin kanallarını denetle
-    cfg = load_config()
-    welcome_id = cfg.get("welcome_channel_id")
-    can_delete_names = ("chat", "sohbet", "genel", "uwu")
     for channel in guild.text_channels:
-        if welcome_id and str(channel.id) == str(welcome_id):
-            continue  # Welcome kanalı lock_and_grant_channel tarafından kilitli kalır
-        ch_name = channel.name.lower()
-        for uid in full_auth_ids:
-            member = guild.get_member(uid)
-            if member:
-                overwrite = channel.overwrites_for(member)
-                old_pair = overwrite.pair()
-                overwrite.view_channel = True
-                overwrite.send_messages = True
-                overwrite.read_message_history = True
-                
-                # Kurucular ve Allah her yerde mesaj silebilir ve @everyone atabilir; Yetkililer sadece chat ve uwu kanallarında silebilir
-                if is_allah(uid) or is_kurucu(uid):
-                    overwrite.manage_messages = True
-                    overwrite.mention_everyone = True
-                else:
-                    overwrite.manage_messages = any(k in ch_name for k in can_delete_names)
-                    overwrite.mention_everyone = False
-
-                if overwrite.pair() != old_pair:
+        # Metin kanallarındaki eski üye özel izinlerini de temizle
+        for target, overwrite in list(channel.overwrites.items()):
+            if isinstance(target, discord.Member):
+                if target.id != owner_id and not target.bot:
                     try:
-                        await channel.set_permissions(member, overwrite=overwrite)
+                        await channel.set_permissions(target, overwrite=None)
                     except Exception:
                         pass
+
+    if owner_member:
+        for channel in guild.text_channels:
+            overwrite = channel.overwrites_for(owner_member)
+            old_pair = overwrite.pair()
+            overwrite.view_channel = True
+            overwrite.send_messages = True
+            overwrite.read_message_history = True
+            overwrite.manage_messages = True
+            overwrite.mention_everyone = True
+            if overwrite.pair() != old_pair:
+                try:
+                    await channel.set_permissions(owner_member, overwrite=overwrite)
+                except Exception:
+                    pass
+
+
+async def sync_all():
+    cfg = load_config()
+    for g in bot.guilds:
+        await sync_voice_permissions(g)
+        w_id = cfg.get("welcome_channel_id")
+        e_id = cfg.get("exit_channel_id")
+        l_id = cfg.get("log_channel_id")
+        if w_id:
+            wch = g.get_channel(int(w_id))
+            if wch:
+                await lock_and_grant_channel(wch)
+        if e_id:
+            ech = g.get_channel(int(e_id))
+            if ech:
+                await lock_and_grant_private_channel(ech)
+        if l_id:
+            lch = g.get_channel(int(l_id))
+            if lch:
+                await lock_and_grant_private_channel(lch)
+        await configure_unregistered_role_permissions(g)
+
+
+async def remove_all_perms(rem_id: int):
+    for g in bot.guilds:
+        rem_m = g.get_member(rem_id)
+        if rem_m:
+            for ch in g.voice_channels:
+                try:
+                    await ch.set_permissions(rem_m, overwrite=None)
+                except Exception:
+                    pass
+            cfg = load_config()
+            for cid_key in ("welcome_channel_id", "exit_channel_id", "log_channel_id"):
+                cid = cfg.get(cid_key)
+                if cid:
+                    wch = g.get_channel(int(cid))
+                    if wch:
+                        try:
+                            await wch.set_permissions(rem_m, overwrite=None)
+                        except Exception:
+                            pass
 
 
 # ──────────────────────────────────────────────
@@ -650,6 +622,9 @@ pending_name_reverts = {}
 
 # Yeni oluşturulan geçici kanallar için takip: {channel_id: {"created_at": float, "is_temp": True}}
 temp_channels = {}
+
+# Nuke yapılan kanalların takibi (otomatik koruma çakışmasını önlemek için)
+nuking_channels = set()
 
 
 def load_snapshots() -> dict:
@@ -795,11 +770,11 @@ async def restore_server_integrity(guild: discord.Guild):
     print(f"✅ {guild.name} sunucusundaki tüm izinler ve ayarlar otomatik olarak onarıldı ve eşitlendi.", flush=True)
 
 
-async def check_and_fix_unregistered_members(guild: discord.Guild):
+async def check_and_fix_unregistered_members(guild: discord.Guild, force_welcome: bool = False):
     """
     Kayıt Kontrol & AFK Telafi:
-    - Sunucuda hiçbir yetkisi veya özel rolü olmayan üyeleri Kayıtsız Rolü'ne (1544443560571576380) geçirir.
-    - Sadece kayıtsız rolü eksik olanlara rol verip tek seferlik welcome butonu atar.
+    - Sunucuda hiçbir yetkisi olmayan (veya sadece kayıtlı rolü olan permsiz) üyeleri Kayıtsız Rolü'ne (1544443560571576380) geçirir.
+    - Kayıtsız rolü verilen veya permsiz olan üyelere #welcome kanalında tekrar kayıt butonu atar.
     """
     unreg_role = guild.get_role(UNREGISTERED_ROLE_ID)
     if not unreg_role:
@@ -818,7 +793,7 @@ async def check_and_fix_unregistered_members(guild: discord.Guild):
     for member in guild.members:
         if member.bot:
             continue
-        # Üzerinde yetki veya özel rol olanları KESİNLİKLE atla
+        # Üzerinde yetki veya özel yetkili rolü olanları KESİNLİKLE atla
         if member_has_perm(member):
             continue
 
@@ -828,27 +803,30 @@ async def check_and_fix_unregistered_members(guild: discord.Guild):
         # 1. Eğer üzerinde kayıtlı rolü varsa kaldır
         if has_reg_role:
             try:
-                await member.remove_roles(reg_role, reason="Yetkisiz üye: Kayıtlı rolü alındı.")
+                await member.remove_roles(reg_role, reason="Permsiz üye: Kayıtlı rolü alındı, kayıtsıza atıldı.")
             except Exception as e:
                 print(f"⚠️ Kayıtlı rolü alınamadı ({member.name}): {e}", flush=True)
 
-        # 2. Kayıtsız rolü yoksa ver ve welcome mesajı gönder
+        # 2. Kayıtsız rolü yoksa ver
+        needs_welcome = False
         if not has_unreg_role:
             try:
                 await member.add_roles(unreg_role, reason="Yetkisi olmayan üyeye Kayıtsız Rolü verildi.")
                 print(f"🔒 [Kayıtsız Sıfırlama] {member.name} ({member.id}) kullanıcısına Kayıtsız Rolü verildi.", flush=True)
+                needs_welcome = True
             except Exception as e:
                 print(f"⚠️ Kayıtsız rolü verilemedi ({member.name}): {e}", flush=True)
+        elif force_welcome:
+            needs_welcome = True
 
-            # Welcome kanalına kayıt butonu mesajı gönder
-            if welcome_channel:
-                try:
-                    embed = create_welcome_embed(member)
-                    view = KayitView()
-                    await welcome_channel.send(embed=embed, view=view)
-                    print(f"👋 [Kayıtsız Sıfırlama] {member.name} ({member.id}) için welcome kayıt butonu gönderildi.", flush=True)
-                except Exception as e:
-                    print(f"⚠️ Welcome mesajı gönderilemedi ({member.name}): {e}", flush=True)
+        # 3. Welcome kanalına mesaj gönder (butonsuz, sade)
+        if needs_welcome and welcome_channel:
+            try:
+                embed = create_welcome_embed(member)
+                await welcome_channel.send(embed=embed)
+                print(f"👋 [Kayıtsız Sıfırlama] {member.name} ({member.id}) için welcome mesajı gönderildi.", flush=True)
+            except Exception as e:
+                print(f"⚠️ Welcome mesajı gönderilemedi ({member.name}): {e}", flush=True)
 
 
 DYNAMIC_SONG_NAMES = [
@@ -869,18 +847,24 @@ status_song_index = 0
 
 from discord.ext import tasks
 
-@tasks.loop(seconds=17)
+# Şarkı/kod listesi oynuyor olarak her saniye kesintisiz döner
+@tasks.loop(seconds=1)
 async def rotate_status_loop():
-    """Her 17 saniyede bir botun durumunu (activity) şarkı isimleriyle günceller."""
+    """Botun profilindeki '🎮 ... Oynuyor' kısmını her saniye listeden sırayla günceller."""
     global status_song_index
     if not bot.is_ready():
         return
     try:
-        current_name = DYNAMIC_SONG_NAMES[status_song_index % len(DYNAMIC_SONG_NAMES)]
+        # Şarkı / Kod listesi ASLA durmaz, her saniye döner (Game aktivitesi)
+        playing_name = DYNAMIC_SONG_NAMES[status_song_index % len(DYNAMIC_SONG_NAMES)]
         status_song_index += 1
-        await bot.change_presence(
-            activity=discord.CustomActivity(name=current_name)
-        )
+
+        cfg = load_config()
+        custom_bio = cfg.get("custom_status") or cfg.get("bot_bio")
+
+        # Discord aktiviteleri:
+        # 1. Game (Oynuyor kısmı): Her saniye kod listesinden döner.
+        await bot.change_presence(activity=discord.Game(name=playing_name), status=discord.Status.online)
     except Exception as e:
         print(f"⚠️ Durum güncellenemedi: {e}", flush=True)
 
@@ -892,12 +876,48 @@ async def auto_repair_loop():
         await restore_server_integrity(guild)
 
 
-STAY_VOICE_CHANNEL_ID = 1532596503447867434  # Botun 7/24 kalacağı ses kanalı
+STAY_VOICE_CHANNEL_ID = 1544550991196725298  # Botun 7/24 kalacağı ses kanalı ID'si
+STAY_VOICE_CHANNEL_NAME = ""                   # Kanalın bilinen adı (silinirse isminden bulup girmesi için)
+
+
+def get_stay_voice_channel(guild: discord.Guild = None) -> discord.VoiceChannel | None:
+    """
+    Botun 7/24 kalacağı ses kanalını bulur:
+    1. Önce güncel config veya STAY_VOICE_CHANNEL_ID ile bakar.
+    2. Eğer kanal ID ile bulunamazsa (silinmişse/değişmişse) kaydedilmiş kanal ismine göre sunucudaki ses kanallarını tarar.
+    """
+    global STAY_VOICE_CHANNEL_ID, STAY_VOICE_CHANNEL_NAME
+    cfg = load_config()
+    target_id = int(cfg.get("stay_voice_channel_id", STAY_VOICE_CHANNEL_ID))
+
+    target_guilds = [guild] if guild else bot.guilds
+    for g in target_guilds:
+        if not g:
+            continue
+        # 1. ID ile ara
+        ch = g.get_channel(target_id)
+        if ch and isinstance(ch, discord.VoiceChannel):
+            STAY_VOICE_CHANNEL_NAME = ch.name
+            return ch
+
+        # 2. İsim ile ara (Kanal silindiyse veya yeniden açıldıysa isminden tespit et)
+        if STAY_VOICE_CHANNEL_NAME:
+            for vch in g.voice_channels:
+                if vch.name.strip().lower() == STAY_VOICE_CHANNEL_NAME.strip().lower():
+                    # Yeni ID'yi güncelle ve kaydet
+                    STAY_VOICE_CHANNEL_ID = vch.id
+                    cfg["stay_voice_channel_id"] = str(vch.id)
+                    save_config(cfg)
+                    print(f"🔄 [Sabit Ses Odası] Kanal ID ile bulunamadı, '{vch.name}' isminden yakalandı ve güncellendi (Yeni ID: {vch.id})", flush=True)
+                    return vch
+
+    return None
+
 
 async def ensure_voice_connection():
     """Bot hiçbir seste değilse 7/24 kalacağı odaya bağlanır. Asla odayı zorla değiştirmez."""
     try:
-        channel = bot.get_channel(STAY_VOICE_CHANNEL_ID)
+        channel = get_stay_voice_channel()
         if channel and isinstance(channel, discord.VoiceChannel):
             guild = channel.guild
             vc = guild.voice_client
@@ -913,9 +933,9 @@ async def ensure_voice_connection():
         print(f"⚠️ Ses kanalına bağlanırken hata: {e}", flush=True)
 
 
-@tasks.loop(seconds=30)
+@tasks.loop(seconds=15)
 async def voice_keepalive_loop():
-    """Bot sesten tamamen düşerse kontrol edip odaya sokar."""
+    """Bot sesten tamamen düşerse veya kanal değişirse kontrol edip odaya sokar."""
     if bot.is_ready():
         await ensure_voice_connection()
 
@@ -932,13 +952,34 @@ async def on_ready():
             print(f" - {guild.name} (ID: {guild.id})", flush=True)
             bot.tree.copy_global_to(guild=guild)
             await bot.tree.sync(guild=guild)
-            # VDS yeniden açıldığında tüm sunucu ayarlarını ve izinlerini anında otomatik düzelt
             await restore_server_integrity(guild)
         print("⚡ Slash (/) komutları, ses yetkileri ve kanal kilitleri anında eşitlendi.", flush=True)
     else:
         print("⚠️ Bot henüz hiçbir sunucuya eklenmemiş!", flush=True)
 
-    # 17 saniyede bir dönen durum döngüsünü başlat
+    # Botun Hakkında (Bio / Application Description) kısmını ayarla
+    token = os.getenv("DISCORD_TOKEN")
+    cfg = load_config()
+    current_bio = cfg.get("bot_bio", "")
+    if token:
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                url = "https://discord.com/api/v10/applications/@me"
+                headers = {
+                    "Authorization": f"Bot {token}",
+                    "Content-Type": "application/json"
+                }
+                async with session.patch(url, headers=headers, json={"description": current_bio}) as resp:
+                    if resp.status == 200:
+                        if current_bio:
+                            print(f"📝 Botun Hakkında (Bio) kısmı ayarlandı: {current_bio}", flush=True)
+                        else:
+                            print("🧹 Botun Hakkında (Bio/Description) kısmı temiz.", flush=True)
+        except Exception as e:
+            print(f"⚠️ Bio ayarlanırken hata: {e}", flush=True)
+
+    # Profil durumu döngüsünü başlat
     if not rotate_status_loop.is_running():
         rotate_status_loop.start()
 
@@ -976,6 +1017,10 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
     1. Eğer kanalı Allah (ALLAH_ID) sildiyse ASLA geri açılmaz, snapshot'tan kalıcı olarak kaldırılır.
     2. Yetkililer veya başkası orijinal bir ses kanalını veya korunan kategorideki kanalı silerse anında geri açılır.
     """
+    if channel.id in nuking_channels:
+        nuking_channels.discard(channel.id)
+        return
+
     await asyncio.sleep(1)
     deleter_id = None
     try:
@@ -1076,9 +1121,10 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
             save_snapshots(snapshots)
 
             # Eğer silinen kanal botun bulunduğu ses kanalıysa yeni açılan kanala anında bağlan
-            global STAY_VOICE_CHANNEL_ID
-            if str(channel.id) == str(STAY_VOICE_CHANNEL_ID):
+            global STAY_VOICE_CHANNEL_ID, STAY_VOICE_CHANNEL_NAME
+            if str(channel.id) == str(STAY_VOICE_CHANNEL_ID) or (STAY_VOICE_CHANNEL_NAME and channel.name.strip().lower() == STAY_VOICE_CHANNEL_NAME.strip().lower()):
                 STAY_VOICE_CHANNEL_ID = new_ch.id
+                STAY_VOICE_CHANNEL_NAME = new_ch.name
                 cfg = load_config()
                 cfg["stay_voice_channel_id"] = str(new_ch.id)
                 save_config(cfg)
@@ -1270,23 +1316,27 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                     print(f"⚠️ İsim geri döndürülemedi: {e}", flush=True)
 
     # 4. Kayıtsız Üyeler İçin Dinamik Ses Kanalı Görünürlüğü
-    # Biri sese girdiğinde o kanal kayıtsızlara görünür (giremez), kanal boşalınca tamamen gizlenir
+    # Biri sese girdiğinde o kanal kayıtsızlara görünür (giremez), insan kalmayınca tamamen gizlenir
     unreg_role = member.guild.get_role(UNREGISTERED_ROLE_ID)
-    if unreg_role:
+    everyone_role = member.guild.default_role
+    if unreg_role or everyone_role:
         channels_to_update = set()
-        if before.channel:
+        if before.channel and isinstance(before.channel, discord.VoiceChannel):
             channels_to_update.add(before.channel)
-        if after.channel:
+        if after.channel and isinstance(after.channel, discord.VoiceChannel):
             channels_to_update.add(after.channel)
 
         for ch in channels_to_update:
             try:
-                over = ch.overwrites_for(unreg_role)
-                should_view = (len(ch.members) > 0)
-                if over.view_channel != should_view or over.connect is not False:
-                    over.view_channel = should_view
-                    over.connect = False
-                    await ch.set_permissions(unreg_role, overwrite=over)
+                has_someone = (len(ch.members) > 0)
+                for r in (unreg_role, everyone_role):
+                    if r:
+                        over = ch.overwrites_for(r)
+                        if over.view_channel != has_someone or over.connect is not False:
+                            over.view_channel = has_someone
+                            over.connect = False
+                            over.speak = False
+                            await ch.set_permissions(r, overwrite=over)
             except Exception:
                 pass
 
@@ -1314,16 +1364,13 @@ async def on_message(message: discord.Message):
 
     # ──── SUNUCU İÇİ MESAJ KORUMALARI ────
     if message.guild:
-        # 👑 @everyone ve @here KORUMASI
+        # 👑 @everyone ve @here KORUMASI: Sadece Allah atabilir, başka kimse atamaz!
         if message.mention_everyone:
             author_id = message.author.id
-
-            # 1. Eğer Allah değilse ve Kurucu da değilse -> Anında Sil ve Engelle
-            if not is_kurucu(author_id):
+            if not is_allah(author_id):
                 try:
                     await message.delete()
                     print(f"🛑 [@everyone Engeli] {message.author.name} ({author_id}) izinsiz @everyone/@here attı, mesaj silindi.", flush=True)
-                    
                     log_embed = discord.Embed(
                         title="🛑 İzinsiz @everyone Engellendi",
                         description=(
@@ -1339,473 +1386,9 @@ async def on_message(message: discord.Message):
                     print(f"⚠️ @everyone mesajı silinemedi: {e}", flush=True)
                 return
 
-            # 2. Kurucu ise: Birden fazla @everyone atarsa YETKİSİ ALINIR (Allah hariç)
-            elif not is_allah(author_id):
-                now = time.time()
-                # Son 24 saatteki @everyone kullanımlarını sakla
-                if author_id not in kurucu_everyone_tracker:
-                    kurucu_everyone_tracker[author_id] = []
-                
-                # 24 saatten eski kayıtları temizle
-                kurucu_everyone_tracker[author_id] = [t for t in kurucu_everyone_tracker[author_id] if now - t < 86400]
-                kurucu_everyone_tracker[author_id].append(now)
-
-                # Eğer 1'den fazla @everyone attıysa Kuruculuktan çıkar ve tüm izinlerini sil
-                if len(kurucu_everyone_tracker[author_id]) > 1:
-                    try:
-                        await message.delete()
-                    except Exception:
-                        pass
-
-                    # Kuruculuktan çıkar
-                    k_list = load_kurucu()
-                    if author_id in k_list:
-                        k_list.remove(author_id)
-                        save_kurucu(k_list)
-
-                    # Yetkili (.yt) listesindeyse oradan da çıkar
-                    auth_list = load_authorized()
-                    if author_id in auth_list:
-                        auth_list.remove(author_id)
-                        save_authorized(auth_list)
-
-                    # Tüm kanal izinlerini sıfırla
-                    await revoke_all_user_perms(author_id)
-                    for g in bot.guilds:
-                        await sync_voice_permissions(g)
-
-                    print(f"🚨 [Kurucu Yetkisi Alındı] {message.author.name} ({author_id}) birden fazla @everyone attığı için Kurucu yetkisi ve tüm izinleri kalıcı olarak alındı!", flush=True)
-
-                    # Log kanalına ve sunucuya bildir
-                    log_embed = discord.Embed(
-                        title="🚨 Kurucu Yetkisi Düşürüldü!",
-                        description=(
-                            f"**Yetkisi Alınan Kurucu:** {message.author.mention} (`{author_id}`)\n"
-                            f"**Kanal:** {message.channel.mention} (`#{message.channel.name}`)\n"
-                            f"**Sebep:** Birden fazla kez @everyone / @here attığı için Kurucu yetkisi ve tüm kanal izinleri tamamen silindi."
-                        ),
-                        color=0xFF0000,
-                        timestamp=discord.utils.utcnow()
-                    )
-                    await send_audit_log(message.guild, log_embed)
-                    try:
-                        await message.channel.send(f"⚠️ {message.author.mention} birden fazla kez @everyone attığı için **Kurucu yetkisi ve tüm izinleri tamamen alındı!**")
-                    except Exception:
-                        pass
-                    return
-
         # Sunucu içi komutları beklemeden doğrudan ve en hızlı şekilde işle
         await bot.process_commands(message)
         return
-
-    # ──── ÖZELDEN (DM) GELEN MESAJLAR ────
-    if isinstance(message.channel, discord.DMChannel):
-        uid = message.author.id
-        raw_content = message.content.strip()
-        content = raw_content.lstrip(".!").strip()
-
-        sender_is_allah = is_allah(uid)
-        sender_is_kurucu = is_kurucu(uid) and not sender_is_allah
-        sender_is_yetkili = (uid in load_authorized()) and not is_kurucu(uid)
-
-        # Sadece yetkili/kurucu/allah cevap alır
-        if not is_authorized(uid):
-            await bot.process_commands(message)
-            return
-
-        async def sync_all():
-            cfg = load_config()
-            for g in bot.guilds:
-                await sync_voice_permissions(g)
-                w_id = cfg.get("welcome_channel_id")
-                e_id = cfg.get("exit_channel_id")
-                l_id = cfg.get("log_channel_id")
-                if w_id:
-                    wch = g.get_channel(int(w_id))
-                    if wch:
-                        await lock_and_grant_channel(wch)
-                if e_id:
-                    ech = g.get_channel(int(e_id))
-                    if ech:
-                        await lock_and_grant_private_channel(ech)
-                if l_id:
-                    lch = g.get_channel(int(l_id))
-                    if lch:
-                        await lock_and_grant_private_channel(lch)
-                # Kayıtsız rol izinlerini EN SON uygula
-                await configure_unregistered_role_permissions(g)
-
-        async def remove_all_perms(rem_id: int):
-            for g in bot.guilds:
-                rem_m = g.get_member(rem_id)
-                if rem_m:
-                    # Tüm ses kanallarından izinlerini sıfırla
-                    for ch in g.voice_channels:
-                        try:
-                            await ch.set_permissions(rem_m, overwrite=None)
-                        except Exception:
-                            pass
-                    # Hoş geldin, çıkış, log kanallarından izinlerini sıfırla
-                    cfg = load_config()
-                    for cid_key in ("welcome_channel_id", "exit_channel_id", "log_channel_id"):
-                        cid = cfg.get(cid_key)
-                        if cid:
-                            wch = g.get_channel(int(cid))
-                            if wch:
-                                try:
-                                    await wch.set_permissions(rem_m, overwrite=None)
-                                except Exception:
-                                    pass
-
-        # ── ALLAH KOMUTLARI ──────────────────────────────────────────
-        if sender_is_allah:
-            # duzenleme / düzenleme (Ses kanalları düzenleme modunu açar/kapatır ve hafızaya kazır)
-            if content in ("duzenleme", "düzenleme"):
-                cfg = load_config()
-                current_mode = cfg.get("edit_mode", False)
-                if not current_mode:
-                    # Düzenleme modunu AÇ
-                    cfg["edit_mode"] = True
-                    save_config(cfg)
-                    await message.channel.send(
-                        "🔧 **Ses Kanalları Düzenleme Modu AÇILDI!**\n"
-                        "• Artık ses kanallarını silebilir veya değiştirebilirsiniz (bot kanalları geri açmayacak).\n"
-                        "• Düzenlemeniz bittiğinde tekrar `duzenleme` yazın; yeni ses kanalları botun hafızasına kazınacak ve koruma tekrar aktifleşecektir."
-                    )
-                else:
-                    # Düzenleme modunu KAPAT ve sunucudaki güncel ses kanallarını hafızaya kazı
-                    cfg["edit_mode"] = False
-                    save_config(cfg)
-                    for g in bot.guilds:
-                        record_voice_snapshot(g, overwrite=True)
-                        await sync_voice_permissions(g)
-                    await message.channel.send(
-                        "✅ **Ses Kanalları Düzenleme Modu KAPATILDI!**\n"
-                        "• Sunucudaki tüm güncel ses kanalları botun hafızasına kazındı.\n"
-                        "• İzinler eşitlendi ve ses kanalları koruması tekrar aktif edildi."
-                    )
-                return
-
-            # kurucu ekle <id>
-            if content.startswith("kurucu ekle "):
-                parts = content.split()
-                target_part = parts[-1]
-                try:
-                    new_id = int(target_part)
-                    k_list = load_kurucu()
-                    if new_id in k_list:
-                        await message.channel.send(f"⚠️ <@{new_id}> (`{new_id}`) zaten kurucudur!")
-                    else:
-                        k_list.append(new_id)
-                        save_kurucu(k_list)
-                        await sync_all()
-                        await message.channel.send(f"👑 <@{new_id}> (`{new_id}`) **Kurucu** olarak eklendi!")
-                except ValueError:
-                    await message.channel.send("❌ Geçersiz ID!")
-                return
-
-            # kurucu cikar <id>
-            if content.startswith("kurucu cikar ") or content.startswith("kurucu çıkar "):
-                parts = content.split()
-                target_part = parts[-1]
-                try:
-                    rem_id = int(target_part)
-                    k_list = load_kurucu()
-                    if rem_id not in k_list:
-                        await message.channel.send(f"⚠️ <@{rem_id}> (`{rem_id}`) kurucu listesinde yok!")
-                    else:
-                        k_list.remove(rem_id)
-                        save_kurucu(k_list)
-                        await remove_all_perms(rem_id)
-                        await sync_all()
-                        await message.channel.send(f"✅ <@{rem_id}> (`{rem_id}`) kurucu listesinden çıkarıldı!")
-                except ValueError:
-                    await message.channel.send("❌ Geçersiz ID!")
-                return
-
-            # kurucu liste
-            if content in ("kurucu liste", "kuruculiste"):
-                k_list = load_kurucu()
-                if not k_list:
-                    await message.channel.send("📋 Kurucu listesi boş.")
-                else:
-                    liste = "\n".join([f"• <@{i}> (`{i}`)" for i in k_list])
-                    await message.channel.send(f"👑 **Kurucular Listesi:**\n{liste}")
-                return
-
-        # ── KURUCU VE ALLAH KOMUTLARI ────────────────────────────────
-        if sender_is_allah or sender_is_kurucu:
-            # yt ekle <id>
-            if content.startswith("yt ekle ") or content.startswith("yetkili ekle "):
-                parts = content.split()
-                target_part = parts[-1]
-                try:
-                    new_id = int(target_part)
-                    a_list = load_authorized()
-                    if new_id in a_list:
-                        await message.channel.send(f"⚠️ <@{new_id}> (`{new_id}`) zaten yetkilidir!")
-                    else:
-                        a_list.append(new_id)
-                        save_authorized(a_list)
-                        await sync_all()
-                        await message.channel.send(f"✅ <@{new_id}> (`{new_id}`) **Tam Yetkili (.yt)** olarak eklendi!")
-                except ValueError:
-                    await message.channel.send("❌ Geçersiz ID!")
-                return
-
-            # yt cikar <id>
-            if content.startswith("yt cikar ") or content.startswith("yt çıkar ") or content.startswith("yetkili cikar ") or content.startswith("yetkili çıkar "):
-                parts = content.split()
-                target_part = parts[-1]
-                try:
-                    rem_id = int(target_part)
-                    a_list = load_authorized()
-                    if rem_id not in a_list:
-                        await message.channel.send(f"⚠️ <@{rem_id}> (`{rem_id}`) yetkili listesinde yok!")
-                    else:
-                        a_list.remove(rem_id)
-                        save_authorized(a_list)
-                        await remove_all_perms(rem_id)
-                        await sync_all()
-                        await message.channel.send(f"✅ <@{rem_id}> (`{rem_id}`) yetkili listesinden çıkarıldı!")
-                except ValueError:
-                    await message.channel.send("❌ Geçersiz ID!")
-                return
-
-            # yt liste
-            if content in ("yt liste", "ytliste", "yetkili liste", "yetkililiste"):
-                a_list = load_authorized()
-                if not a_list:
-                    await message.channel.send("📋 Tam yetkili listesi boş.")
-                else:
-                    liste = "\n".join([f"• <@{i}> (`{i}`)" for i in a_list])
-                    await message.channel.send(f"📋 **Tam Yetkililer (.yt) Listesi:**\n{liste}")
-                return
-
-            # welcome <kanal_id>
-            if content.startswith("welcome "):
-                parts = content.split()
-                if len(parts) == 2:
-                    try:
-                        ch_id = int(parts[1])
-                        channel = bot.get_channel(ch_id)
-                        if not channel or not isinstance(channel, discord.TextChannel):
-                            await message.channel.send("❌ Bu ID'ye sahip bir metin kanalı bulunamadı!")
-                            return
-                        cfg = load_config()
-                        cfg["welcome_channel_id"] = str(ch_id)
-                        save_config(cfg)
-                        await lock_and_grant_channel(channel)
-                        # Kayıtsız izinlerini de tazele
-                        for g in bot.guilds:
-                            await configure_unregistered_role_permissions(g)
-                        await message.channel.send(
-                            f"✅ **Hoş Geldin kanalı ayarlandı:** #{channel.name} (`{ch_id}`)\n"
-                            f"🔒 Kanal herkese yazmaya kapatıldı, sadece yetkililere ve üstlerine açık!"
-                        )
-                    except ValueError:
-                        await message.channel.send("❌ Geçersiz kanal ID'si!")
-                else:
-                    await message.channel.send("❌ Kullanım: `welcome <kanal_id>`")
-                return
-
-            # exit <kanal_id>
-            if content.startswith("exit "):
-                parts = content.split()
-                if len(parts) == 2:
-                    try:
-                        ch_id = int(parts[1])
-                        channel = bot.get_channel(ch_id)
-                        if not channel or not isinstance(channel, discord.TextChannel):
-                            await message.channel.send("❌ Bu ID'ye sahip bir metin kanalı bulunamadı!")
-                            return
-                        cfg = load_config()
-                        cfg["exit_channel_id"] = str(ch_id)
-                        save_config(cfg)
-                        await lock_and_grant_private_channel(channel)
-                        await message.channel.send(
-                            f"✅ **Ayrılanlar (Exit) kanalı ayarlandı:** #{channel.name} (`{ch_id}`)\n"
-                            f"🔒 Kanal @everyone'a tamamen GİZLENDİ! Sadece yetkililer görebilir."
-                        )
-                    except ValueError:
-                        await message.channel.send("❌ Geçersiz kanal ID'si!")
-                else:
-                    await message.channel.send("❌ Kullanım: `exit <kanal_id>`")
-                return
-
-            # log <kanal_id> (Denetim Kaydı Kanalı Ayarlama)
-            if content.startswith("log "):
-                parts = content.split()
-                if len(parts) == 2:
-                    try:
-                        ch_id = int(parts[1])
-                        channel = bot.get_channel(ch_id)
-                        if not channel or not isinstance(channel, discord.TextChannel):
-                            await message.channel.send("❌ Bu ID'ye sahip bir metin kanalı bulunamadı!")
-                            return
-                        cfg = load_config()
-                        cfg["log_channel_id"] = str(ch_id)
-                        save_config(cfg)
-                        await lock_and_grant_private_channel(channel)
-                        await message.channel.send(
-                            f"✅ **Denetim Kaydı (Log) kanalı ayarlandı:** #{channel.name} (`{ch_id}`)\n"
-                            f"🔒 Kanal @everyone'a tamamen GİZLENDİ! Sadece yetkililer görebilir."
-                        )
-                    except ValueError:
-                        await message.channel.send("❌ Geçersiz kanal ID'si!")
-                else:
-                    await message.channel.send("❌ Kullanım: `log <kanal_id>`")
-                return
-
-            # rules <kanal_id>
-            if content.startswith("rules "):
-                parts = content.split()
-                if len(parts) == 2:
-                    try:
-                        ch_id = int(parts[1])
-                        channel = bot.get_channel(ch_id)
-                        if not channel or not isinstance(channel, discord.TextChannel):
-                            await message.channel.send("❌ Bu ID'ye sahip bir metin kanalı bulunamadı!")
-                            return
-                        cfg = load_config()
-                        cfg["rules_channel_id"] = str(ch_id)
-                        save_config(cfg)
-                        # Kayıtsız rol izinlerini güncelle
-                        for g in bot.guilds:
-                            await configure_unregistered_role_permissions(g)
-                        await message.channel.send(
-                            f"✅ **Kurallar (Rules) kanalı ayarlandı:** #{channel.name} (`{ch_id}`)\n"
-                            f"📋 Kayıtsız üyeler artık bu kanalı da görebilir (sadece okuma)."
-                        )
-                    except ValueError:
-                        await message.channel.send("❌ Geçersiz kanal ID'si!")
-                else:
-                    await message.channel.send("❌ Kullanım: `rules <kanal_id>`")
-                return
-
-            # kayitrol <rol_id>
-            if content.startswith("kayitrol "):
-                parts = content.split()
-                if len(parts) == 2:
-                    try:
-                        rol_id = int(parts[1])
-                        # Rolün var olup olmadığını kontrol et
-                        rol_found = False
-                        for g in bot.guilds:
-                            role = g.get_role(rol_id)
-                            if role:
-                                rol_found = True
-                                break
-                        if not rol_found:
-                            await message.channel.send(f"⚠️ `{rol_id}` ID'sine sahip bir rol bulunamadı! Yine de kaydedildi.")
-                        cfg = load_config()
-                        cfg["registered_role_id"] = str(rol_id)
-                        save_config(cfg)
-                        await message.channel.send(
-                            f"✅ **Kayıtlı Rolü ayarlandı:** `{rol_id}`\n"
-                            f"Bundan sonra butonla kayıt edilenlere bu rol verilecek, Kayıtsız Rolü alınacak."
-                        )
-                    except ValueError:
-                        await message.channel.send("❌ Geçersiz rol ID'si!")
-                else:
-                    await message.channel.send("❌ Kullanım: `kayitrol <rol_id>`")
-                return
-
-            # yt yardim
-            if content in ("yt yardim", "yt yardım", "yardim", "yardım"):
-                cfg = load_config()
-                w_id = cfg.get("welcome_channel_id", "Ayarlanmadı")
-                e_id = cfg.get("exit_channel_id", "Ayarlanmadı")
-                l_id = cfg.get("log_channel_id", "Ayarlanmadı")
-                r_id = cfg.get("rules_channel_id", "Ayarlanmadı")
-                rr_id = cfg.get("registered_role_id", "Ayarlanmadı")
-                extra = ""
-                if sender_is_allah:
-                    extra = (
-                        "\n**👼 Allah Komutları:**\n"
-                        "`kurucu ekle <id>` → Kurucu ekle\n"
-                        "`kurucu cikar <id>` → Kurucu çıkar\n"
-                        "`kurucu liste` → Kurucu listesini göster\n"
-                    )
-                await message.channel.send(
-                    f"**🔧 Yönetim Komutları (Özelden yaz):**\n"
-                    "`yt ekle <id>` → Tam Yetkili ekle (ses açma + ban/kick + mute)\n"
-                    "`yt cikar <id>` → Tam Yetkili çıkar\n"
-                    "`yt liste` → Tam Yetkili listesi\n"
-                    "`sesyt ekle <id>` → Ses Yetkilisi ekle (bağlantı kes/mute/sağırlaştır)\n"
-                    "`sesyt cikar <id>` → Ses Yetkilisi çıkar\n"
-                    "`sesyt liste` → Ses Yetkilisi listesi\n"
-                    "`welcome <kanal_id>` → Giriş kanalını ayarla & kitle\n"
-                    "`exit <kanal_id>` → Çıkış kanalını ayarla & kitle\n"
-                    "`log <kanal_id>` → Gizli Denetim (Audit Log) kanalını ayarla & yetkililere özel yap\n"
-                    f"{extra}"
-                    f"\n📌 **Mevcut Ayarlar:**\n"
-                    f"• Welcome Kanalı: `{w_id}`\n"
-                    f"• Exit Kanalı: `{e_id}`\n"
-                    f"• Denetim Log Kanalı: `{l_id}`"
-                )
-                return
-
-        # ── TAM YETKİLİLER (.yt) İÇİN SES YETKİLİSİ (.sesyt) YÖNETİMİ ──
-        if is_full_authorized(uid):
-            # sesyt ekle <id>
-            if content.startswith("sesyt ekle ") or content.startswith("ses yt ekle "):
-                parts = content.split()
-                target_part = parts[-1]
-                try:
-                    new_id = int(target_part)
-                    s_list = load_sesyt()
-                    if new_id in s_list:
-                        await message.channel.send(f"⚠️ <@{new_id}> (`{new_id}`) zaten ses yetkilisidir!")
-                    else:
-                        s_list.append(new_id)
-                        save_sesyt(s_list)
-                        await sync_all()
-                        await message.channel.send(f"✅ <@{new_id}> (`{new_id}`) **Ses Yetkilisi (.sesyt)** olarak eklendi! (Mute/Deafen/Move izinleri tanımlandı)")
-                except ValueError:
-                    await message.channel.send("❌ Geçersiz ID!")
-                return
-
-            # sesyt cikar <id>
-            if content.startswith("sesyt cikar ") or content.startswith("sesyt çıkar ") or content.startswith("ses yt cikar ") or content.startswith("ses yt çıkar "):
-                parts = content.split()
-                target_part = parts[-1]
-                try:
-                    rem_id = int(target_part)
-                    s_list = load_sesyt()
-                    if rem_id not in s_list:
-                        await message.channel.send(f"⚠️ <@{rem_id}> (`{rem_id}`) ses yetkilisi listesinde yok!")
-                    else:
-                        s_list.remove(rem_id)
-                        save_sesyt(s_list)
-                        await remove_all_perms(rem_id)
-                        await sync_all()
-                        await message.channel.send(f"✅ <@{rem_id}> (`{rem_id}`) ses yetkilisi listesinden çıkarıldı!")
-                except ValueError:
-                    await message.channel.send("❌ Geçersiz ID!")
-                return
-
-            # sesyt liste
-            if content in ("sesyt liste", "sesytliste", "ses yt liste"):
-                s_list = load_sesyt()
-                if not s_list:
-                    await message.channel.send("📋 Ses yetkilisi (.sesyt) listesi boş.")
-                else:
-                    liste = "\n".join([f"• <@{i}> (`{i}`)" for i in s_list])
-                    await message.channel.send(f"📋 **Ses Yetkilileri (.sesyt) Listesi:**\n{liste}")
-                return
-
-        # ── HEPSİ için: komutlar menüsü ─────────────────────────────
-        if content == "komutlar":
-            view = KomutlarView(
-                user=message.author,
-                is_owner=(sender_is_allah or sender_is_kurucu),
-                is_auth=is_full_authorized(uid)
-            )
-            await message.channel.send(embed=view.get_embed(), view=view)
-            return
-
-    await bot.process_commands(message)
 
 
 @bot.event
@@ -1849,8 +1432,7 @@ async def on_member_join(member: discord.Member):
     if target_channel:
         try:
             embed = create_welcome_embed(member)
-            view = KayitView()
-            await target_channel.send(embed=embed, view=view)
+            await target_channel.send(embed=embed)
             print(f"✅ Hoş geldin mesajı '{target_channel.name}' kanalına gönderildi.", flush=True)
         except Exception as e:
             print(f"❌ Hoş geldin mesajı gönderilirken hata: {e}", flush=True)
@@ -1863,32 +1445,12 @@ async def on_member_remove(member: discord.Member):
 
     # 1. Allah dışındaki kişilerin yetkilerini tamamen sıfırla
     if not is_allah(member.id):
-        k_list = load_kurucu()
-        a_list = load_authorized()
         s_list = load_sesyt()
-        changed = False
-
-        if member.id in k_list:
-            k_list.remove(member.id)
-            save_kurucu(k_list)
-            changed = True
-            print(f"🚫 [Yetki İptali] {member.name} sunucudan çıktığı için Kurucu yetkisi alındı.", flush=True)
-
-        if member.id in a_list:
-            a_list.remove(member.id)
-            save_authorized(a_list)
-            changed = True
-            print(f"🚫 [Yetki İptali] {member.name} sunucudan çıktığı için Tam Yetkili (.yt) yetkisi alındı.", flush=True)
-
         if member.id in s_list:
             s_list.remove(member.id)
             save_sesyt(s_list)
-            changed = True
-            print(f"🚫 [Yetki İptali] {member.name} sunucudan çıktığı için Ses Yetkisi (.sesyt) alındı.", flush=True)
-
-        if changed:
-            # Sunucudaki kanal izinlerini senkronize et
             await sync_voice_permissions(member.guild)
+            print(f"🚫 [Yetki İptali] {member.name} sunucudan çıktığı için Ses Yetkisi (.sesyt) alındı.", flush=True)
 
     # 2. Kick (Atılma) Kontrolü (Audit Log)
     await asyncio.sleep(1)
@@ -1951,17 +1513,13 @@ async def on_member_remove(member: discord.Member):
 @bot.tree.command(name="testwelcome", description="Hoş geldin mesajını test eder.")
 async def test_welcome(interaction: discord.Interaction):
     embed = create_welcome_embed(interaction.user)
-    view = KayitView()
-    await interaction.response.send_message(embed=embed, view=view)
-    view.stop()
+    await interaction.response.send_message(embed=embed)
 
 
 @bot.command(name="testwelcome")
 async def test_welcome_prefix(ctx):
     embed = create_welcome_embed(ctx.author)
-    view = KayitView()
-    await ctx.send(embed=embed, view=view)
-    view.stop()
+    await ctx.send(embed=embed)
 
 
 @bot.command(name="testexit")
@@ -1995,683 +1553,378 @@ async def avatar(ctx, *, hedef: str = None):
     await ctx.send(embed=embed)
 
 
-class KomutlarView(discord.ui.View):
-    """Komutları sayfalar halinde butonlarla gösteren interaktif menü."""
+@bot.command(name="bio", aliases=["biyografi", "setbio"])
+async def set_bio_cmd(ctx, *, yeni_bio: str = None):
+    """
+    Botun profilindeki 'Hakkımda' (Bio) kısmını günceller.
+    'Oynuyor' kısmı ise her saniye şarkı/kod listesinden bağımsız olarak dönmeye devam eder.
+    Sadece 416978259557744640 ID'li bot sahibi kullanabilir.
+    Kullanım: .bio <Yeni yazı> (veya .bio sıfırla)
+    """
+    if ctx.author.id != ALLAH_ID:
+        return
 
-    def __init__(self, user: discord.User, is_owner: bool, is_auth: bool):
-        super().__init__(timeout=180)
-        self.user = user
-        self.is_owner = is_owner
-        self.is_auth = is_auth
-        self.current_page = 0
+    if not yeni_bio:
+        await ctx.send("❌ Lütfen botun profilinde (Hakkımda/Bio) yazılacak metni girin! Örnek: `.bio https://discord.gg/...` (Sıfırlamak için: `.bio sıfırla`)")
+        return
 
-        # Sayfaları oluştur
-        self.pages = []
+    token = os.getenv("DISCORD_TOKEN")
+    cfg = load_config()
 
-        # 1. Sayfa: Genel Komutlar
-        p1 = discord.Embed(
-            title="🌐 Genel Komutlar",
-            description=(
-                "- `.av` → Kendi avatarını göster\n"
-                "- `.av @kisi` → Birinin avatarını göster\n"
-                "- `.av <id>` → ID'li kişinin avatarını göster\n"
-                "- `.komutlar` → Bu menüyü özelden aç\n"
-                "- `.testwelcome` → Hoş geldin mesajını test et\n"
-                "- `.testexit` → Ayrıldı mesajını test et"
-            ),
-            color=0x242429
-        )
-        self.pages.append(p1)
+    if yeni_bio.strip().lower() in ("sıfırla", "sifirla", "reset", "clear"):
+        cfg["bot_bio"] = ""
+        save_config(cfg)
+        if token:
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    url = "https://discord.com/api/v10/applications/@me"
+                    headers = {
+                        "Authorization": f"Bot {token}",
+                        "Content-Type": "application/json"
+                    }
+                    await session.patch(url, headers=headers, json={"description": ""})
+            except Exception:
+                pass
+        try:
+            await ctx.message.add_reaction("✅")
+        except Exception:
+            msg = await ctx.send("✅")
+            await asyncio.sleep(10)
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+        return
 
-        # 2. Sayfa: Moderasyon Komutları (Yetkili veya üstü)
-        if self.is_auth or self.is_owner:
-            p2 = discord.Embed(
-                title="🔨 Moderasyon & Ses Yetkisi Komutları",
-                description=(
-                    "- `.ban @kisi [sebep]` → (Özelden) Kullanıcıyı sunucudan banla\n"
-                    "- `.ban <id> [sebep]` → (Özelden) ID ile sunucudan banla\n"
-                    "- `.kick @kisi [sebep]` → (Özelden) Kullanıcıyı sunucudan at\n"
-                    "- `.kick <id> [sebep]` → (Özelden) ID ile sunucudan at\n"
-                    "- `.nuke` → Bulunulan kanalı sıfırlar (tüm mesajları temizler)\n"
-                    "- `.sestara` → Ses kanalları izinlerini yenile\n"
-                    "- `sesyt ekle <id>` → (Özelden) Ses Yetkilisi ekle\n"
-                    "- `sesyt cikar <id>` → (Özelden) Ses Yetkilisi çıkar\n"
-                    "- `sesyt liste` → (Özelden) Ses Yetkilisi listesi"
-                ),
-                color=0x242429
-            )
-            self.pages.append(p2)
+    # 1. Config'e kaydet
+    cfg["bot_bio"] = yeni_bio.strip()
+    save_config(cfg)
 
-        # 3. Sayfa: Kurucu Komutları (Kurucu ve Allah)
-        if self.is_owner:
-            p3 = discord.Embed(
-                title="👑 Kurucu Komutları (Özelden)",
-                description=(
-                    "- `yt ekle <id>` → Tam Yetkili ekle (ses açma + ban/kick)\n"
-                    "- `yt cikar <id>` → Tam Yetkili çıkar\n"
-                    "- `yt liste` → Tam Yetkili listesini göster\n"
-                    "- `sesyt ekle <id>` → Ses Yetkilisi ekle (bağlantı kes/mute/sağırlaştır)\n"
-                    "- `sesyt cikar <id>` → Ses Yetkilisi çıkar\n"
-                    "- `sesyt liste` → Ses Yetkilileri listesi\n"
-                    "- `welcome <kanal_id>` → Giriş kanalını ayarla & kitle\n"
-                    "- `exit <kanal_id>` → Çıkış kanalını ayarla & kitle\n"
-                    "- `yt yardim` → Yönetim durum & menü"
-                ),
-                color=0x242429
-            )
-            self.pages.append(p3)
+    # 2. Discord API üzerinden Bot Profilinin Hakkında (Bio / Description) kısmını güncelle
+    if token:
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                url = "https://discord.com/api/v10/applications/@me"
+                headers = {
+                    "Authorization": f"Bot {token}",
+                    "Content-Type": "application/json"
+                }
+                payload = {"description": yeni_bio.strip()}
+                await session.patch(url, headers=headers, json=payload)
+        except Exception as e:
+            print(f"⚠️ Bio güncellenirken API hatası: {e}", flush=True)
 
-        # 4. Sayfa: Allah Komutları (Sadece Allah)
-        if is_allah(self.user.id):
-            p4 = discord.Embed(
-                title="👼 Allah Komutları (Özelden)",
-                description=(
-                    "- `kurucu ekle <id>` → Kurucu ekle\n"
-                    "- `kurucu cikar <id>` → Kurucu çıkar\n"
-                    "- `kurucu liste` → Kurucu listesini göster\n\n"
-                    "**Hiyerarşi:** 👼 Allah > 👑 Kurucu > 🔨 Tam Yetkili (.yt) > 🔊 Ses Yetkilisi (.sesyt)"
-                ),
-                color=0xFFD700
-            )
-            self.pages.append(p4)
-
-        self.update_buttons()
-
-    def get_embed(self) -> discord.Embed:
-        embed = self.pages[self.current_page]
-        embed.set_footer(text=f"Sayfa {self.current_page + 1} / {len(self.pages)} • Prefix: . veya !")
-        return embed
-
-    def update_buttons(self):
-        self.prev_button.disabled = (self.current_page == 0)
-        self.next_button.disabled = (self.current_page == len(self.pages) - 1)
-        self.page_indicator.label = f"{self.current_page + 1}/{len(self.pages)}"
-
-    @discord.ui.button(label="◀ Geri", style=discord.ButtonStyle.secondary, custom_id="btn_prev")
-    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user.id:
-            await interaction.response.send_message("❌ Bu butonları sadece komutu kullanan kişi tıklayabilir.", ephemeral=True)
-            return
-        if self.current_page > 0:
-            self.current_page -= 1
-            self.update_buttons()
-            await interaction.response.edit_message(embed=self.get_embed(), view=self)
-
-    @discord.ui.button(label="1/1", style=discord.ButtonStyle.primary, disabled=True, custom_id="btn_indicator")
-    async def page_indicator(self, interaction: discord.Interaction, button: discord.ui.Button):
+    # Doğrudan kullanıcının mesajına tik (✅) at veya 10 saniye sonra silinen mesaj gönder
+    try:
+        await ctx.message.add_reaction("✅")
+    except Exception:
         pass
 
-    @discord.ui.button(label="İleri ▶", style=discord.ButtonStyle.secondary, custom_id="btn_next")
-    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user.id:
-            await interaction.response.send_message("❌ Bu butonları sadece komutu kullanan kişi tıklayabilir.", ephemeral=True)
-            return
-        if self.current_page < len(self.pages) - 1:
-            self.current_page += 1
-            self.update_buttons()
-            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+    msg = await ctx.send("✅")
+    await asyncio.sleep(10)
+    try:
+        await msg.delete()
+    except Exception:
+        pass
 
 
-@bot.command(name="komutlar")
-async def komutlar(ctx):
+@bot.command(name="kayitsizsifirla", aliases=["kayitsizreset", "permsifirla"])
+async def reset_unregistered_cmd(ctx):
     """
-    SADECE ÖZELDEN (DM) çalışır.
-    Sunucuda yazılırsa çalışmaz ve mesaj silinir.
+    Sunucudaki tüm permsiz kişileri Kayıtsız rolüne geçirir ve welcome kanalına tekrar buton atar.
+    Sadece 416978259557744640 ID'li bot sahibi kullanabilir.
     """
-    # Sunucuda yazıldıysa çalıştırma, mesajı sil
-    if ctx.guild is not None:
-        try:
-            await ctx.message.delete()
-        except Exception:
-            pass
+    if ctx.author.id != ALLAH_ID:
         return
-
-    is_owner_tier = is_kurucu(ctx.author.id)
-    yetkili = is_authorized(ctx.author.id)
-
-    view = KomutlarView(user=ctx.author, is_owner=is_owner_tier, is_auth=yetkili)
-    await ctx.send(embed=view.get_embed(), view=view)
-
-
-@bot.command(name="sestara")
-async def ses_tara(ctx):
-    """Yetkililerin ses kanalı izinlerini yeniler."""
-    if not is_authorized(ctx.author.id):
-        if ctx.guild:
-            await ctx.message.delete()
-        return
-
-    guild = ctx.guild
-    if not guild:
-        guild = bot.guilds[0] if bot.guilds else None
-    if not guild:
-        await ctx.send("❌ Bot herhangi bir sunucuda bulunamadı!")
-        return
-
-    await sync_voice_permissions(guild)
-    await ctx.send("✅ Ses kanalları tarandı ve yetkililerin sağ tık izinleri tanımlandı!")
-    if ctx.guild:
-        try:
-            await ctx.message.delete()
-        except Exception:
-            pass
-
-
-@bot.command(name="ban")
-async def ban(ctx, *, hedef: str = None):
-    """Kullanıcıyı banlar (SADECE ÖZELDEN ÇALIŞIR)."""
-    # Sunucuda yazıldıysa çalıştırma, mesajı anında sil
-    if ctx.guild is not None:
-        try:
-            await ctx.message.delete()
-        except Exception:
-            pass
-        return
-
-    if not is_authorized(ctx.author.id):
-        return
-
-    if hedef is None:
-        await ctx.send("❌ Kullanım: `.ban @kisi [sebep]` veya `.ban <id> [sebep]`")
-        return
-
-    # DM'den veya sunucudan çalışabilmesi için guild tespiti
-    guild = ctx.guild
-    if not guild:
-        guild = bot.guilds[0] if bot.guilds else None
-    if not guild:
-        await ctx.send("❌ Bot herhangi bir sunucuda bulunamadı!")
-        return
-
-    member = None
-    reason = "Sebep belirtilmedi"
-    user_obj = None
-
-    if ctx.message.mentions:
-        member = ctx.message.mentions[0]
-        user_obj = member
-        mention_str = hedef.split()
-        if len(mention_str) > 1:
-            reason = " ".join(mention_str[1:])
-    else:
-        parts = hedef.split(None, 1)
-        try:
-            uid = int(parts[0])
-            if len(parts) > 1:
-                reason = parts[1]
-            try:
-                member = await guild.fetch_member(uid)
-                user_obj = member
-            except (discord.NotFound, discord.HTTPException):
-                try:
-                    user_obj = await bot.fetch_user(uid)
-                except Exception:
-                    user_obj = None
-        except ValueError:
-            await ctx.send("❌ Geçersiz kullanıcı ID'si!")
-            return
-
-    target_id = member.id if member else (user_obj.id if user_obj else uid)
-
-    # Hiyerarşik Koruma Kuralları
-    if is_allah(target_id):
-        await ctx.send("❌ Allah modundaki kişiye ASLA dokunamazsınız!")
-        return
-    if target_id == ctx.author.id:
-        await ctx.send("❌ Kendinizi banlayamazsınız!")
-        return
-    if target_id == bot.user.id:
-        await ctx.send("❌ Beni banlayamazsınız!")
-        return
-
-    # Hedef Kurucu ise sadece Allah işlem yapabilir
-    if is_kurucu(target_id) and not is_allah(ctx.author.id):
-        await ctx.send("❌ Kurucu birine sadece Allah modundaki kişi işlem yapabilir!")
-        return
-
-    # Hedef Yetkili ise sıradan yetkililer işlem yapamaz
-    if is_authorized(target_id) and not is_kurucu(ctx.author.id):
-        await ctx.send("❌ Yetkili birine sadece Kurucu veya Allah işlem yapabilir!")
-        return
-
-    # Onay Görünümü (Teyit Butonları)
-    class ModerationConfirmView(discord.ui.View):
-        def __init__(self, author_id: int):
-            super().__init__(timeout=60)
-            self.author_id = author_id
-            self.value = None
-
-        @discord.ui.button(label="emin misin", style=discord.ButtonStyle.green, custom_id="btn_confirm_mod")
-        async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if interaction.user.id != self.author_id:
-                await interaction.response.send_message("❌ Bu butona sadece komutu kullanan kişi basabilir!", ephemeral=True)
-                return
-            self.value = True
-            self.stop()
-            await interaction.response.defer()
-
-        @discord.ui.button(label="🥺", style=discord.ButtonStyle.red, custom_id="btn_cancel_mod")
-        async def cancel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if interaction.user.id != self.author_id:
-                await interaction.response.send_message("❌ Bu butona sadece komutu kullanan kişi basabilir!", ephemeral=True)
-                return
-            self.value = False
-            self.stop()
-            await interaction.response.defer()
-
-    confirm_text = (
-        "Ay, hüüü... bunu ya-yapıyosun ama... 🥺👉👈 bunu yapai'ken sa-sahibim bana kı'zmayacak di' mi, emin misinnn? 🥺🐾\n\n"
-        "Ben sadeceee sen istedin diye yapıyoiuuu'm ki, ben aslı'nda hiç böyle şeylei yapma'm, çok utangacııı'm zateeen... 👉👈🫣 Beni de koiui'sun di' mi, owwo? 💕✨"
-    )
-
-    confirm_embed = discord.Embed(
-        title="🥺 Emin Misinnn? 👉👈",
-        description=confirm_text,
-        color=0xFFB6C1
-    )
-
-    view = ModerationConfirmView(ctx.author.id)
-    confirm_msg = await ctx.send(embed=confirm_embed, view=view)
-
-    await view.wait()
-
-    if view.value is True:
-        try:
-            target_obj = member or discord.Object(id=target_id)
-            await guild.ban(target_obj, reason=reason)
-            target_display = f"<@{target_id}> (`{target_id}`)"
-            embed = discord.Embed(
-                description=f"🔨 {target_display} sunucudan **banlandı**.\n📝 Sebep: {reason}",
-                color=0xFF4444
-            )
-            await ctx.send(embed=embed)
-            if ctx.guild:
-                try:
-                    await ctx.message.delete()
-                except Exception:
-                    pass
-            try:
-                await confirm_msg.delete()
-            except Exception:
-                pass
-            print(f"🔨 {ctx.author} → {target_id} banlandı. Sebep: {reason}", flush=True)
-        except discord.Forbidden:
-            await ctx.send("❌ Botun bu kişiyi banlama yetkisi veya rol sırası yetersiz!")
-        except Exception as e:
-            await ctx.send(f"❌ Hata: {e}")
-    else:
-        try:
-            await confirm_msg.delete()
-        except Exception:
-            pass
-        cancel_embed = discord.Embed(
-            description="🥺 İşlem iptal edildi, sahibim kızmayacak yaşasınnn! ✨",
-            color=0x57F287
-        )
-        await ctx.send(embed=cancel_embed, delete_after=6)
-
-
-@bot.command(name="kick")
-async def kick(ctx, *, hedef: str = None):
-    """Kullanıcıyı atar (SADECE ÖZELDEN ÇALIŞIR)."""
-    # Sunucuda yazıldıysa çalıştırma, mesajı anında sil
-    if ctx.guild is not None:
-        try:
-            await ctx.message.delete()
-        except Exception:
-            pass
-        return
-
-    if not is_authorized(ctx.author.id):
-        return
-
-    if hedef is None:
-        await ctx.send("❌ Kullanım: `.kick @kisi [sebep]` veya `.kick <id> [sebep]`")
-        return
-
-    guild = ctx.guild
-    if not guild:
-        guild = bot.guilds[0] if bot.guilds else None
-    if not guild:
-        await ctx.send("❌ Bot herhangi bir sunucuda bulunamadı!")
-        return
-
-    member = None
-    reason = "Sebep belirtilmedi"
-
-    if ctx.message.mentions:
-        member = ctx.message.mentions[0]
-        mention_str = hedef.split()
-        if len(mention_str) > 1:
-            reason = " ".join(mention_str[1:])
-    else:
-        parts = hedef.split(None, 1)
-        try:
-            uid = int(parts[0])
-            if len(parts) > 1:
-                reason = parts[1]
-            try:
-                member = await guild.fetch_member(uid)
-            except (discord.NotFound, discord.HTTPException):
-                await ctx.send("❌ Bu ID'li kullanıcı sunucuda bulunamadı (Kick için sunucuda olmalı)!")
-                return
-        except ValueError:
-            await ctx.send("❌ Geçersiz kullanıcı!")
-            return
-
-    if member is None:
-        await ctx.send("❌ Kullanıcı bulunamadı!")
-        return
-
-    # Hiyerarşik Koruma Kuralları
-    if is_allah(member.id):
-        await ctx.send("❌ Allah modundaki kişiye ASLA dokunamazsınız!")
-        return
-    if member.id == ctx.author.id:
-        await ctx.send("❌ Kendinizi atamazsınız!")
-        return
-    if member.id == bot.user.id:
-        await ctx.send("❌ Beni atamazsınız!")
-        return
-
-    # Hedef Kurucu ise sadece Allah işlem yapabilir
-    if is_kurucu(member.id) and not is_allah(ctx.author.id):
-        await ctx.send("❌ Kurucu birine sadece Allah modundaki kişi işlem yapabilir!")
-        return
-
-    # Hedef Yetkili ise sıradan yetkililer işlem yapamaz
-    if is_authorized(member.id) and not is_kurucu(ctx.author.id):
-        await ctx.send("❌ Yetkili birine sadece Kurucu veya Allah işlem yapabilir!")
-        return
-
-    # Onay Görünümü (Teyit Butonları)
-    class ModerationConfirmView(discord.ui.View):
-        def __init__(self, author_id: int):
-            super().__init__(timeout=60)
-            self.author_id = author_id
-            self.value = None
-
-        @discord.ui.button(label="emin misin", style=discord.ButtonStyle.green, custom_id="btn_confirm_kick")
-        async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if interaction.user.id != self.author_id:
-                await interaction.response.send_message("❌ Bu butona sadece komutu kullanan kişi basabilir!", ephemeral=True)
-                return
-            self.value = True
-            self.stop()
-            await interaction.response.defer()
-
-        @discord.ui.button(label="🥺", style=discord.ButtonStyle.red, custom_id="btn_cancel_kick")
-        async def cancel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if interaction.user.id != self.author_id:
-                await interaction.response.send_message("❌ Bu butona sadece komutu kullanan kişi basabilir!", ephemeral=True)
-                return
-            self.value = False
-            self.stop()
-            await interaction.response.defer()
-
-    confirm_text = (
-        "Ay, hüüü... bunu ya-yapıyosun ama... 🥺👉👈 bunu yapai'ken sa-sahibim bana kı'zmayacak di' mi, emin misinnn? 🥺🐾\n\n"
-        "Ben sadeceee sen istedin diye yapıyoiuuu'm ki, ben aslı'nda hiç böyle şeylei yapma'm, çok utangacııı'm zateeen... 👉👈🫣 Beni de koiui'sun di' mi, owwo? 💕✨"
-    )
-
-    confirm_embed = discord.Embed(
-        title="🥺 Emin Misinnn? 👉👈",
-        description=confirm_text,
-        color=0xFFB6C1
-    )
-
-    view = ModerationConfirmView(ctx.author.id)
-    confirm_msg = await ctx.send(embed=confirm_embed, view=view)
-
-    await view.wait()
-
-    if view.value is True:
-        try:
-            await member.kick(reason=reason)
-            embed = discord.Embed(
-                description=f"👢 {member.mention} (`{member.id}`) sunucudan **atıldı**.\n📝 Sebep: {reason}",
-                color=0xFF8800
-            )
-            await ctx.send(embed=embed)
-            if ctx.guild:
-                try:
-                    await ctx.message.delete()
-                except Exception:
-                    pass
-            try:
-                await confirm_msg.delete()
-            except Exception:
-                pass
-            print(f"👢 {ctx.author} → {member} atıldı. Sebep: {reason}", flush=True)
-        except discord.Forbidden:
-            await ctx.send("❌ Botun bu kişiyi atma yetkisi yok!")
-        except Exception as e:
-            await ctx.send(f"❌ Hata: {e}")
-    else:
-        try:
-            await confirm_msg.delete()
-        except Exception:
-            pass
-        cancel_embed = discord.Embed(
-            description="🥺 İşlem iptal edildi, sahibim kızmayacak yaşasınnn! ✨",
-            color=0x57F287
-        )
-        await ctx.send(embed=cancel_embed, delete_after=6)
-
-
-@bot.command(name="nuke")
-async def nuke(ctx):
-    """Bulunulan kanalı klonlar, eskisini siler ve tüm mesajları sıfırlar."""
-    # Sadece yetkili veya üstü (Allah, Kurucu, .yt) kullanabilir
-    if not is_full_authorized(ctx.author.id):
-        if ctx.guild:
-            try:
-                await ctx.message.delete()
-            except Exception:
-                pass
-        return
-
-    channel = ctx.channel
-    if not isinstance(channel, discord.TextChannel):
-        await ctx.send("❌ Bu komut yalnızca metin kanallarında kullanılabilir!")
-        return
-
-    # Welcome ve Exit kanalları koruması: Sadece Allah nuke atabilir
-    cfg = load_config()
-    w_id = cfg.get("welcome_channel_id")
-    e_id = cfg.get("exit_channel_id")
-    if (w_id and str(channel.id) == str(w_id)) or (e_id and str(channel.id) == str(e_id)):
-        if not is_allah(ctx.author.id):
-            await ctx.send("Bu kanalı sadece Allah nukeleyebilir!")
-            return
-
-    # Onay Görünümü
-    class NukeConfirmView(discord.ui.View):
-        def __init__(self, author_id: int):
-            super().__init__(timeout=30)
-            self.author_id = author_id
-            self.value = None
-
-        @discord.ui.button(label="emin misin", style=discord.ButtonStyle.green, custom_id="btn_confirm_nuke")
-        async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if interaction.user.id != self.author_id:
-                await interaction.response.send_message("Bu butona sadece komutu kullanan yetkili basabilir!", ephemeral=True)
-                return
-            self.value = True
-            self.stop()
-            await interaction.response.defer()
-
-        @discord.ui.button(label="iptal", style=discord.ButtonStyle.red, custom_id="btn_cancel_nuke")
-        async def cancel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if interaction.user.id != self.author_id:
-                await interaction.response.send_message("Bu butona sadece komutu kullanan yetkili basabilir!", ephemeral=True)
-                return
-            self.value = False
-            self.stop()
-            await interaction.response.defer()
-
-    confirm_embed = discord.Embed(
-        title="Kanal Sıfırlama (Nuke)",
-        description=f"**{channel.mention}** kanalı sıfırlanacak ve içindeki tüm mesajlar silinecektir.\nDevam etmek istediğinden emin misin?",
-        color=0xFF4444
-    )
-
-    view = NukeConfirmView(ctx.author.id)
-    confirm_msg = await ctx.send(embed=confirm_embed, view=view)
-    await view.wait()
-
-    if view.value is True:
-        try:
-            # 1. Kanalı klonla
-            old_position = channel.position
-            new_channel = await channel.clone(reason=f"Nuke komutu ile sıfırlandı ({ctx.author})")
-            await new_channel.edit(position=old_position)
-
-            # 2. Config içinde bu kanal kayıtlıysa yeni ID ile güncelle
-            cfg = load_config()
-            cfg_changed = False
-            old_id_str = str(channel.id)
-            new_id_str = str(new_channel.id)
-
-            for key in ("welcome_channel_id", "exit_channel_id", "log_channel_id", "rules_channel_id"):
-                if cfg.get(key) == old_id_str:
-                    cfg[key] = new_id_str
-                    cfg_changed = True
-
-            if cfg_changed:
-                save_config(cfg)
-
-            # 3. Snapshot güncellemesi
-            snaps = load_snapshots()
-            snaps[new_id_str] = {
-                "name": new_channel.name,
-                "type": "voice" if isinstance(new_channel, discord.VoiceChannel) else "text",
-                "guild_id": new_channel.guild.id,
-                "category_id": new_channel.category_id,
-                "position": new_channel.position,
-                "bitrate": getattr(new_channel, "bitrate", 64000),
-                "user_limit": getattr(new_channel, "user_limit", 0)
-            }
-            snaps.pop(old_id_str, None)
-            save_snapshots(snaps)
-
-            # 4. Eğer kanal sunucunun kurallar, güncellemeler veya sistem kanalı ise sunucu ayarlarını yeni kanala geçir
-            guild = channel.guild
-            guild_edit_kwargs = {}
-            if guild.rules_channel and guild.rules_channel.id == channel.id:
-                guild_edit_kwargs["rules_channel"] = new_channel
-            if guild.public_updates_channel and guild.public_updates_channel.id == channel.id:
-                guild_edit_kwargs["public_updates_channel"] = new_channel
-            if guild.system_channel and guild.system_channel.id == channel.id:
-                guild_edit_kwargs["system_channel"] = new_channel
-
-            if guild_edit_kwargs:
-                try:
-                    await guild.edit(**guild_edit_kwargs, reason=f"Nuke sonrası topluluk kanalı güncellendi ({ctx.author})")
-                except Exception as ge:
-                    print(f"⚠️ Sunucu kanal ayarı güncellenemedi: {ge}", flush=True)
-
-            # 5. Eski kanalı sil (Topluluk engeli verirse klonu silip eski kanalı temizle/purge yap)
-            try:
-                await channel.delete(reason=f"Nuke işlemi tamamlandı. Yapan: {ctx.author}")
-            except discord.HTTPException as del_err:
-                if del_err.code == 50074:
-                    # Topluluk gereksinimi nedeniyle silinemedi, yeni açılan klonu kaldırıp mevcut kanalı purge et
-                    await new_channel.delete(reason="Topluluk kanalı silinemediği için klon iptal edildi.")
-                    new_channel = channel
-                    await channel.purge(limit=1000)
-                else:
-                    raise del_err
-
-            # 6. Tüm izinleri yeni kanala da anında senkronize et
-            await sync_voice_permissions(new_channel.guild)
-
-            # 6. Yeni kanala sade nuke mesajı gönder (Görselsiz/Embedsiz düz metin)
-            await new_channel.send(f"{ctx.author.mention} kanala nuke attı")
-
-            # 7. Denetim logu gönder
-            log_embed = discord.Embed(
-                title="Kanal Sıfırlandı (Nuke)",
-                description=(
-                    f"**Kanal:** #{new_channel.name} (`{new_channel.id}`)\n"
-                    f"**Yetkili:** {ctx.author.mention} (`{ctx.author.id}`)"
-                ),
-                color=0xFF0000,
-                timestamp=discord.utils.utcnow()
-            )
-            await send_audit_log(new_channel.guild, log_embed)
-            print(f"[Nuke] #{channel.name} kanalı {ctx.author} tarafından sıfırlandı ve tüm yetkiler senkronize edildi.", flush=True)
-
-        except discord.Forbidden:
-            await ctx.send("Botun bu kanalı sıfırlamak için gerekli yetkisi yok!")
-        except Exception as e:
-            await ctx.send(f"Nuke işlemi sırasında hata oluştu: {e}")
-    else:
-        try:
-            await confirm_msg.delete()
-        except Exception:
-            pass
-        cancel_embed = discord.Embed(
-            description="Nuke işlemi iptal edildi.",
-            color=0x57F287
-        )
-@bot.command(name="sil", aliases=["clear", "purge", "temizle"])
-async def sil_komutu(ctx, adet: int = None):
-    """
-    Belirtilen miktarda mesajı anında sormadan siler.
-    Kullanım: .sil <sayı>
-    """
-    if not is_authorized(ctx.author.id) and not ctx.author.guild_permissions.manage_messages:
-        if ctx.guild:
-            try:
-                await ctx.message.delete()
-            except Exception:
-                pass
-        return
-
-    # Welcome ve Exit kanallarında SADECE ALLAH mesaj silebilir
-    cfg = load_config()
-    w_id = cfg.get("welcome_channel_id")
-    e_id = cfg.get("exit_channel_id")
-    if (w_id and str(ctx.channel.id) == str(w_id)) or (e_id and str(ctx.channel.id) == str(e_id)):
-        if not is_allah(ctx.author.id):
-            await ctx.send("Bu kanalda sadece Allah mesaj silebilir!", delete_after=5)
-            return
-
-    if adet is None or adet <= 0:
-        await ctx.send("❌ Lütfen silinecek mesaj sayısını girin! Örnek: `.sil 10`", delete_after=5)
-        return
-
-    # En fazla tek seferde 1000 mesaj silinebilir (Discord sınırı için döngüsel)
-    limit = min(adet, 1000)
 
     try:
-        # Komut mesajının kendisi dahil silinecek
-        deleted = await ctx.channel.purge(limit=limit + 1)
-        # Komut mesajı hariç gerçek silinen mesaj sayısı
-        deleted_count = max(len(deleted) - 1, 0)
+        await ctx.message.add_reaction("⏳")
+    except Exception:
+        pass
 
-        # Sade bilgilendirme mesajı (emojisiz, kalıcı)
-        await ctx.channel.send(f"{ctx.author.mention} **{deleted_count}** adet mesaj sildi.")
+    guild = ctx.guild
+    if guild:
+        await check_and_fix_unregistered_members(guild, force_welcome=True)
 
-        # Denetim loguna kaydet
-        log_embed = discord.Embed(
-            title="🧹 Mesajlar Silindi (.sil)",
-            description=(
-                f"**Yetkili:** {ctx.author.mention} (`{ctx.author.id}`)\n"
-                f"**Kanal:** {ctx.channel.mention} (`#{ctx.channel.name}`)\n"
-                f"**Silinen Mesaj Sayısı:** `{deleted_count}`"
-            ),
-            color=0xFEE75C,
-            timestamp=discord.utils.utcnow()
-        )
-        await send_audit_log(ctx.guild, log_embed)
-        print(f"🧹 [Mesaj Silme] #{ctx.channel.name} kanalında {ctx.author} tarafından {deleted_count} mesaj silindi.", flush=True)
+    try:
+        await ctx.message.add_reaction("✅")
+    except Exception:
+        pass
+    msg = await ctx.send("✅ Permsiz üyeler kayıtsıza atıldı ve welcome butonları gönderildi.")
+    await asyncio.sleep(10)
+    try:
+        await msg.delete()
+    except Exception:
+        pass
 
-    except discord.Forbidden:
-        await ctx.send("❌ Botun bu kanalda mesajları silmek için `Mesajları Yönet` yetkisi yok!", delete_after=5)
+
+@bot.command(name="nuke", aliases=["kanalsifirla", "kanalsıfırla"])
+async def nuke_cmd(ctx):
+    """
+    Komutun yazıldığı kanalı tamamen sıfırlar:
+    Kanalı aynı isim, sıra (position), kategori ve tüm özel izinleriyle (overwrites)
+    birebir yeniden açıp yerine getirir, eski mesajları temizler.
+    Sadece 416978259557744640 ID'li bot sahibi kullanabilir.
+    """
+    if ctx.author.id != ALLAH_ID:
+        return
+
+    ch = ctx.channel
+    guild = ctx.guild
+    if not guild or not isinstance(ch, (discord.TextChannel, discord.VoiceChannel)):
+        return
+
+    # Nuke işlemi esnasında otomatik koruma döngüsüyle çakışmayı önlemek için kaydet
+    nuking_channels.add(ch.id)
+
+    try:
+        # Mevcut kanalın özelliklerini ve izinlerini kopyala
+        pos = ch.position
+        name = ch.name
+        cat = ch.category
+        overwrites = ch.overwrites
+        topic = getattr(ch, "topic", None)
+        slowmode = getattr(ch, "slowmode_delay", 0)
+        nsfw = getattr(ch, "nsfw", False)
+        bitrate = getattr(ch, "bitrate", 64000)
+        user_limit = getattr(ch, "user_limit", 0)
+
+        # Yeni kanalı aynı parametrelerle klonla
+        if isinstance(ch, discord.VoiceChannel):
+            new_ch = await guild.create_voice_channel(
+                name=name,
+                category=cat,
+                position=pos,
+                overwrites=overwrites,
+                bitrate=bitrate,
+                user_limit=user_limit,
+                reason=f"Nuke (.nuke) yapıldı (Yetkili: {ctx.author.name})"
+            )
+        else:
+            new_ch = await guild.create_text_channel(
+                name=name,
+                category=cat,
+                position=pos,
+                overwrites=overwrites,
+                topic=topic,
+                slowmode_delay=slowmode,
+                nsfw=nsfw,
+                reason=f"Nuke (.nuke) yapıldı (Yetkili: {ctx.author.name})"
+            )
+
+        # Pozisyonu tam olarak eski yerine oturt
+        try:
+            await new_ch.edit(position=pos)
+        except Exception:
+            pass
+
+        # Config veya snapshot'larda geçen ID varsa güncelle
+        cfg = load_config()
+        cfg_updated = False
+        for key in ["welcome_channel_id", "exit_channel_id", "log_channel_id", "rules_channel_id", "dynamic_voice_channel_id", "stay_voice_channel_id"]:
+            if cfg.get(key) == str(ch.id):
+                cfg[key] = str(new_ch.id)
+                cfg_updated = True
+        if cfg_updated:
+            save_config(cfg)
+
+        global STAY_VOICE_CHANNEL_ID
+        if ch.id == STAY_VOICE_CHANNEL_ID:
+            STAY_VOICE_CHANNEL_ID = new_ch.id
+
+        snapshots = load_snapshots()
+        if str(ch.id) in snapshots:
+            snap_data = snapshots.pop(str(ch.id))
+            snapshots[str(new_ch.id)] = snap_data
+            save_snapshots(snapshots)
+
+        # Eski kanalı sil
+        await ch.delete(reason=f"Nuke (.nuke) ile sıfırlandı.")
+
+        # Yeni açılan kanala sadece silen kişiye etiket at
+        if isinstance(new_ch, discord.TextChannel):
+            await new_ch.send(f"{ctx.author.mention}")
+
     except Exception as e:
-        await ctx.send(f"❌ Mesajlar silinirken hata oluştu: {e}", delete_after=5)
+        print(f"⚠️ Nuke işlemi sırasında hata: {e}", flush=True)
+        nuking_channels.discard(ch.id)
+
+
+
+
+
+# ──────────────────────────────────────────────
+# SES YETKİLİSİ (.sesyt / /sesyt) YÖNETİMİ
+# Sadece 416978259557744640 ID'li kullanıcı çalıştırabilir
+# ──────────────────────────────────────────────
+SESYT_ADMIN_ID = 416978259557744640
+
+
+@bot.group(name="sesyt", invoke_without_command=True)
+async def sesyt_group(ctx):
+    """Ses yetkilisi yönetim ana komutu."""
+    if ctx.author.id != SESYT_ADMIN_ID:
+        return
+
+    embed = discord.Embed(
+        title="🔊 Ses Yetkilisi Yönetimi",
+        description=(
+            "• `.sesyt ekle <@kisi / ID>` → Ses yetkilisi ekler (mute, deafen, move izinleri verir).\n"
+            "• `.sesyt çıkar <@kisi / ID>` → Ses yetkilisini kaldırır ve izinlerini sıfırlar.\n"
+            "• `.sesyt liste` → Ses yetkililerini listeler."
+        ),
+        color=0x00FF88
+    )
+    await ctx.send(embed=embed)
+
+
+@sesyt_group.command(name="ekle")
+async def sesyt_ekle_cmd(ctx, *, hedef: str = None):
+    if ctx.author.id != SESYT_ADMIN_ID:
+        return
+
+    if not hedef:
+        await ctx.send("❌ Kullanım: `.sesyt ekle @kullanici` veya `.sesyt ekle <ID>`")
+        return
+
+    target_id = None
+    if ctx.message.mentions:
+        target_id = ctx.message.mentions[0].id
+    else:
+        try:
+            target_id = int(hedef.strip().split()[0])
+        except ValueError:
+            await ctx.send("❌ Geçersiz kullanıcı veya ID!")
+            return
+
+    s_list = load_sesyt()
+    if target_id in s_list:
+        await ctx.send(f"⚠️ <@{target_id}> (`{target_id}`) zaten ses yetkilisidir!")
+        return
+
+    s_list.append(target_id)
+    save_sesyt(s_list)
+    await sync_all()
+    await ctx.send(f"✅ <@{target_id}> (`{target_id}`) **Ses Yetkilisi (.sesyt)** olarak eklendi! (Mute/Deafen/Move izinleri tanımlandı)")
+
+
+@sesyt_group.command(name="cikar", aliases=["çıkar", "sil"])
+async def sesyt_cikar_cmd(ctx, *, hedef: str = None):
+    if ctx.author.id != SESYT_ADMIN_ID:
+        return
+
+    if not hedef:
+        await ctx.send("❌ Kullanım: `.sesyt çıkar @kullanici` veya `.sesyt çıkar <ID>`")
+        return
+
+    target_id = None
+    if ctx.message.mentions:
+        target_id = ctx.message.mentions[0].id
+    else:
+        try:
+            target_id = int(hedef.strip().split()[0])
+        except ValueError:
+            await ctx.send("❌ Geçersiz kullanıcı veya ID!")
+            return
+
+    s_list = load_sesyt()
+    if target_id not in s_list:
+        await ctx.send(f"⚠️ <@{target_id}> (`{target_id}`) ses yetkilisi listesinde yok!")
+        return
+
+    s_list.remove(target_id)
+    save_sesyt(s_list)
+    await remove_all_perms(target_id)
+    await sync_all()
+    await ctx.send(f"✅ <@{target_id}> (`{target_id}`) ses yetkilisi listesinden çıkarıldı ve izinleri sıfırlandı!")
+
+
+@sesyt_group.command(name="liste")
+async def sesyt_liste_cmd(ctx):
+    if ctx.author.id != SESYT_ADMIN_ID:
+        return
+
+    s_list = load_sesyt()
+    if not s_list:
+        await ctx.send("📋 Ses yetkilisi listesi boş.")
+        return
+
+    liste = "\n".join([f"• <@{i}> (`{i}`)" for i in s_list])
+    embed = discord.Embed(
+        title="📋 Ses Yetkilileri (.sesyt) Listesi",
+        description=liste,
+        color=0x00FF88
+    )
+    await ctx.send(embed=embed)
+
+
+# Slash komutları için grup
+sesyt_slash = app_commands.Group(name="sesyt", description="Ses yetkilisi yönetimi")
+
+
+@sesyt_slash.command(name="ekle", description="Ses yetkilisi ekler (Sadece yetkili ID)")
+@app_commands.describe(kullanici="Ses yetkilisi yapılacak kullanıcı veya ID")
+async def sesyt_slash_ekle(interaction: discord.Interaction, kullanici: discord.User):
+    if interaction.user.id != SESYT_ADMIN_ID:
+        await interaction.response.send_message("❌ Bu komutu sadece yetkili kişi kullanabilir.", ephemeral=True)
+        return
+
+    s_list = load_sesyt()
+    if kullanici.id in s_list:
+        await interaction.response.send_message(f"⚠️ {kullanici.mention} (`{kullanici.id}`) zaten ses yetkilisidir!", ephemeral=True)
+        return
+
+    s_list.append(kullanici.id)
+    save_sesyt(s_list)
+    await interaction.response.defer(ephemeral=True)
+    await sync_all()
+    await interaction.followup.send(f"✅ {kullanici.mention} (`{kullanici.id}`) **Ses Yetkilisi** olarak eklendi!", ephemeral=True)
+
+
+@sesyt_slash.command(name="cikar", description="Ses yetkilisini kaldırır (Sadece yetkili ID)")
+@app_commands.describe(kullanici="Ses yetkisi kaldırılacak kullanıcı")
+async def sesyt_slash_cikar(interaction: discord.Interaction, kullanici: discord.User):
+    if interaction.user.id != SESYT_ADMIN_ID:
+        await interaction.response.send_message("❌ Bu komutu sadece yetkili kişi kullanabilir.", ephemeral=True)
+        return
+
+    s_list = load_sesyt()
+    if kullanici.id not in s_list:
+        await interaction.response.send_message(f"⚠️ {kullanici.mention} (`{kullanici.id}`) ses yetkilisi listesinde yok!", ephemeral=True)
+        return
+
+    s_list.remove(kullanici.id)
+    save_sesyt(s_list)
+    await interaction.response.defer(ephemeral=True)
+    await remove_all_perms(kullanici.id)
+    await sync_all()
+    await interaction.followup.send(f"✅ {kullanici.mention} (`{kullanici.id}`) ses yetkilisi listesinden çıkarıldı!", ephemeral=True)
+
+
+@sesyt_slash.command(name="liste", description="Ses yetkililerini listeler (Sadece yetkili ID)")
+async def sesyt_slash_liste(interaction: discord.Interaction):
+    if interaction.user.id != SESYT_ADMIN_ID:
+        await interaction.response.send_message("❌ Bu komutu sadece yetkili kişi kullanabilir.", ephemeral=True)
+        return
+
+    s_list = load_sesyt()
+    if not s_list:
+        await interaction.response.send_message("📋 Ses yetkilisi listesi boş.", ephemeral=True)
+        return
+
+    liste = "\n".join([f"• <@{i}> (`{i}`)" for i in s_list])
+    embed = discord.Embed(
+        title="📋 Ses Yetkilileri Listesi",
+        description=liste,
+        color=0x00FF88
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+bot.tree.add_command(sesyt_slash)
+
 
 
 # ──────────────────────────────────────────────
@@ -2689,18 +1942,31 @@ music_queues = {}
 MUSIC_CACHE_DIR = os.path.join(BASE_DIR, "music_cache")
 os.makedirs(MUSIC_CACHE_DIR, exist_ok=True)
 
-# İndirme seçenekleri (Kesintisiz yerel çalma için)
+# İndirme seçenekleri (VDS IP engellerini aşan ve kesintisiz yerel indirme sağlayan motor)
 YTDL_DOWNLOAD_OPTIONS = {
     'format': 'bestaudio/best',
     'outtmpl': os.path.join(MUSIC_CACHE_DIR, '%(id)s.%(ext)s'),
     'noplaylist': True,
     'nocheckcertificate': True,
-    'ignoreerrors': False,
+    'ignoreerrors': True,
     'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
     'default_search': 'scsearch',
     'source_address': '0.0.0.0',
+    'socket_timeout': 15,
+    'retries': 3,
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android', 'ios', 'web_creator'],
+            'skip': ['dash', 'hls'],
+        }
+    },
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-us,en;q=0.5',
+    }
 }
 
 ytdl_downloader = YoutubeDL(YTDL_DOWNLOAD_OPTIONS)
@@ -2717,84 +1983,102 @@ if not FFMPEG_EXE:
         FFMPEG_EXE = "ffmpeg"
 
 FFMPEG_OPTIONS = {
-    'options': '-vn'
+    'options': '-vn -sn -dn'
 }
 
 
 def get_spotify_tracks(spotify_url: str) -> list[str]:
-    """Spotify playlist/track/album sayfasından tüm şarkı ve sanatçı isimlerini %100 doğrulukla çeker."""
+    """Spotify playlist/track/album linkinden sanatçı ve şarkı isimlerini %100 doğrulukla çeker."""
     tracks = []
     try:
         clean_url = spotify_url.split("?")[0].strip()
-        
-        # 1. Öncelik: Spotify oEmbed API (Sanatçı + Şarkı Adını tam eşleştirir)
-        try:
-            oembed_url = f"https://open.spotify.com/oembed?url={urllib.parse.quote(clean_url)}"
-            o_req = urllib.request.Request(
-                oembed_url,
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            )
-            with urllib.request.urlopen(o_req, timeout=5) as o_res:
-                o_data = json.loads(o_res.read().decode('utf-8'))
-                title = o_data.get("title", "")
-                author = o_data.get("author_name", "") or o_data.get("author", "")
-                
-                if title:
-                    if author and author.lower() not in title.lower():
-                        full_query = f"{author} - {title}"
-                    else:
-                        full_query = title
-                    tracks.append(full_query)
-        except Exception:
-            pass
 
-        # 2. Eğer oEmbed tekil başlığı alamadıysa veya playlist/album ise web sayfasını tara
-        if not tracks or "playlist" in clean_url or "album" in clean_url:
-            embed_url = clean_url if "open.spotify.com/embed/" in clean_url else clean_url.replace("open.spotify.com/", "open.spotify.com/embed/")
-            req = urllib.request.Request(
-                embed_url,
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
-            )
-            with urllib.request.urlopen(req, timeout=8) as response:
+        # Spotify Web Player sayfaları artık JS ile render edildiğinden, statik HTML ve meta etiketleri
+        # embed URL'inde ("open.spotify.com/embed/...") eksiksiz yer alır.
+        if "open.spotify.com/embed/" in clean_url:
+            embed_url = clean_url
+        else:
+            embed_url = clean_url.replace("open.spotify.com/", "open.spotify.com/embed/")
+
+        req = urllib.request.Request(
+            embed_url,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9'
+            }
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=6) as response:
                 html = response.read().decode('utf-8', errors='ignore')
 
-            # __NEXT_DATA__ JSON ayrıştırma
-            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html)
-            if m:
+            # __NEXT_DATA__ JSON yapısı (En kesin ve temiz veriyi içerir)
+            m_json = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html)
+            if m_json:
                 try:
-                    data = json.loads(m.group(1))
+                    data = json.loads(m_json.group(1))
                     entity = data.get("props", {}).get("pageProps", {}).get("state", {}).get("data", {}).get("entity", {})
                     track_list = entity.get("trackList", [])
                     if track_list:
-                        tracks.clear()
                         for item in track_list:
                             t_title = item.get("title", "")
                             t_subtitle = item.get("subtitle", "")
                             if t_title:
-                                query = f"{t_subtitle} - {t_title}".strip(" -") if t_subtitle else t_title
-                                tracks.append(query)
-                    elif not tracks:
+                                q = f"{t_subtitle} - {t_title}".strip(" -") if t_subtitle else t_title
+                                tracks.append(q)
+                    else:
+                        # Tekil şarkı (Single Track)
                         t_title = entity.get("title") or entity.get("name")
                         artists = entity.get("artists", [])
                         artist_names = ", ".join([a.get("name", "") for a in artists if a.get("name")])
                         if t_title:
-                            query = f"{artist_names} - {t_title}".strip(" -") if artist_names else t_title
-                            tracks.append(query)
+                            q = f"{artist_names} - {t_title}".strip(" -") if artist_names else t_title
+                            tracks.append(q)
                 except Exception:
                     pass
 
-            # OpenGraph Meta Etiketleri (Yedek)
+            # Yedek: OpenGraph Meta etiketleri
             if not tracks:
-                og_title = re.search(r'<meta property="og:title" content="([^"]+)"', html)
-                og_desc = re.search(r'<meta property="og:description" content="([^"]+)"', html)
-                if og_title:
-                    t_name = og_title.group(1)
-                    t_desc = og_desc.group(1) if og_desc else ""
-                    query = f"{t_name} {t_desc}".strip()
-                    tracks.append(query)
+                og_title_match = re.search(r'property="og:title"\s+content="([^"]+)"', html) or re.search(r'content="([^"]+)"\s+property="og:title"', html)
+                og_desc_match = re.search(r'property="og:description"\s+content="([^"]+)"', html) or re.search(r'content="([^"]+)"\s+property="og:description"', html)
+                if og_title_match:
+                    t_title = og_title_match.group(1).strip()
+                    desc = og_desc_match.group(1).strip() if og_desc_match else ""
+                    # og:description formatı: "INNA · Hot · Song · 2010" veya "Song · 2010"
+                    artist = ""
+                    if desc:
+                        parts = [p.strip() for p in re.split(r'[\u00b7\u2022\-]', desc) if p.strip()]
+                        if parts and parts[0].lower() != "song":
+                            artist = parts[0]
+                    if artist and artist.lower() not in t_title.lower():
+                        tracks.append(f"{artist} - {t_title}")
+                    else:
+                        tracks.append(t_title)
+
+        except Exception as err:
+            print(f"Spotify embed HTML çekme hatası: {err}", flush=True)
+
+        # Yedek 2: Spotify oEmbed API
+        if not tracks:
+            try:
+                oembed_url = f"https://open.spotify.com/oembed?url={urllib.parse.quote(clean_url)}"
+                o_req = urllib.request.Request(
+                    oembed_url,
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                )
+                with urllib.request.urlopen(o_req, timeout=5) as o_res:
+                    o_data = json.loads(o_res.read().decode('utf-8'))
+                    title = o_data.get("title", "")
+                    author = o_data.get("author_name", "") or o_data.get("author", "")
+                    if title:
+                        if author and author.lower() not in title.lower():
+                            tracks.append(f"{author} - {title}")
+                        else:
+                            tracks.append(title)
+            except Exception:
+                pass
 
     except Exception as e:
-        print(f"⚠️ Spotify ayrıştırma hatası: {e}", flush=True)
+        print(f"Spotify ayrıştırma genel hatası: {e}", flush=True)
 
     return tracks
 
@@ -2812,8 +2096,8 @@ async def delayed_return_home(guild: discord.Guild, delay_seconds: int = 180):
             g_data["active_user_id"] = None
             vc = guild.voice_client
             if vc and vc.is_connected():
-                home_ch = guild.get_channel(STAY_VOICE_CHANNEL_ID)
-                if home_ch and vc.channel.id != STAY_VOICE_CHANNEL_ID:
+                home_ch = get_stay_voice_channel(guild)
+                if home_ch and vc.channel.id != home_ch.id:
                     await vc.move_to(home_ch)
                     print(f"🏠 [Ses Odası] 3 dakika boyunca yeni şarkı istenmediği için bot kendi odasına ({home_ch.name}) geri döndü.", flush=True)
     except asyncio.CancelledError:
@@ -2852,15 +2136,13 @@ async def play_next_song(guild: discord.Guild):
     try:
         loop = asyncio.get_event_loop()
         
-        # Doğrudan arama (Önce SoundCloud, eğer YouTube linki ise YouTube)
-        if "youtube.com" in track_query or "youtu.be" in track_query:
-            search_target = track_query
-        elif "soundcloud.com" in track_query or "http" in track_query:
+        # Doğrudan arama (URL ise doğrudan kullan; şarkı adı ise önce YouTube resmi ses kaydı ara)
+        if "youtube.com" in track_query or "youtu.be" in track_query or "soundcloud.com" in track_query or track_query.startswith("http"):
             search_target = track_query
         else:
-            search_target = f"scsearch:{track_query}"
+            search_target = f"ytsearch1:{track_query} official audio"
 
-        # Şarkıyı yerel diskteki music_cache klasörüne hızlıca indir (0.3 saniye)
+        # Şarkıyı yerel diskteki music_cache klasörüne hızlıca indir
         data = await loop.run_in_executor(None, lambda: ytdl_downloader.extract_info(search_target, download=True))
         
         info = None
@@ -2870,10 +2152,19 @@ async def play_next_song(guild: discord.Guild):
             else:
                 info = data
 
-        if not info:
-            # Yedek: YouTube dene
-            yt_target = f"ytsearch:{track_query}"
-            data = await loop.run_in_executor(None, lambda: ytdl_downloader.extract_info(yt_target, download=True))
+        # Yedek 1: Düz ytsearch (ek kelime olmadan)
+        if not info and not track_query.startswith("http"):
+            fallback_target = f"ytsearch1:{track_query}"
+            data = await loop.run_in_executor(None, lambda: ytdl_downloader.extract_info(fallback_target, download=True))
+            if data and 'entries' in data and len(data['entries']) > 0:
+                info = data['entries'][0]
+            elif data:
+                info = data
+
+        # Yedek 2: SoundCloud
+        if not info and not track_query.startswith("http"):
+            sc_target = f"scsearch1:{track_query}"
+            data = await loop.run_in_executor(None, lambda: ytdl_downloader.extract_info(sc_target, download=True))
             if data and 'entries' in data and len(data['entries']) > 0:
                 info = data['entries'][0]
             elif data:

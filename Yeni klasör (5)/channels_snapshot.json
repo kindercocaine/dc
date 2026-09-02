@@ -259,5 +259,112 @@
     "position": 1,
     "bitrate": 64000,
     "user_limit": 0
+  },
+  "1544550975547777126": {
+    "name": "breakwhore",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 14,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544550980098457621": {
+    "name": "ebal rot absolute",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 13,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544550991196725298": {
+    "name": "эмо",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 11,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544550996384944278": {
+    "name": "Nice Dick",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 9,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544551018619207721": {
+    "name": "i smoke weed all the time",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 1,
+    "bitrate": 64000,
+    "user_limit": 99
+  },
+  "1544551030296150056": {
+    "name": "Ganja",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 15,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544551038110007336": {
+    "name": "fkn0wned",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 3,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544551071047876688": {
+    "name": "Forza Belgica",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 5,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544551086885699726": {
+    "name": "Against All Nerds",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 4,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544551092430446603": {
+    "name": "Dupa",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 7,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544551097455218770": {
+    "name": "kitten",
+    "type": "voice",
+    "guild_id": 1021779804023947365,
+    "category_id": 1532595887199490200,
+    "position": 12,
+    "bitrate": 64000,
+    "user_limit": 0
+  },
+  "1544830393738592408": {
+    "name": "uwu",
+    "guild_id": 1021779804023947365,
+    "category_id": 1021779804023947366,
+    "position": 5,
+    "bitrate": 0,
+    "user_limit": 0
   }
 }
