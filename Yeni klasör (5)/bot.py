@@ -2673,8 +2673,14 @@ from yt_dlp import YoutubeDL
 # Sunucu bazlı müzik kuyruğu: {guild_id: {"queue": list[dict], "current": dict, "loop": bool}}
 music_queues = {}
 
-YTDL_OPTIONS = {
+# Müzik Önbellek Dizini (Local Cache)
+MUSIC_CACHE_DIR = os.path.join(BASE_DIR, "music_cache")
+os.makedirs(MUSIC_CACHE_DIR, exist_ok=True)
+
+# İndirme seçenekleri (Kesintisiz yerel çalma için)
+YTDL_DOWNLOAD_OPTIONS = {
     'format': 'bestaudio/best',
+    'outtmpl': os.path.join(MUSIC_CACHE_DIR, '%(id)s.%(ext)s'),
     'noplaylist': True,
     'nocheckcertificate': True,
     'ignoreerrors': False,
@@ -2684,6 +2690,8 @@ YTDL_OPTIONS = {
     'default_search': 'scsearch',
     'source_address': '0.0.0.0',
 }
+
+ytdl_downloader = YoutubeDL(YTDL_DOWNLOAD_OPTIONS)
 
 import shutil
 
@@ -2696,13 +2704,9 @@ if not FFMPEG_EXE:
     else:
         FFMPEG_EXE = "ffmpeg"
 
-# Kesintisiz Canlı Yayın & Yüksek Kaliteli Ses Akışı
 FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn'
 }
-
-ytdl = YoutubeDL(YTDL_OPTIONS)
 
 
 def get_spotify_tracks(spotify_url: str) -> list[str]:
@@ -2789,7 +2793,7 @@ async def delayed_return_home(guild: discord.Guild, delay_seconds: int = 180):
 
 
 async def play_next_song(guild: discord.Guild):
-    """Kuyruktaki sıradaki şarkıyı çalar. Kuyruk bittiğinde 3 dakika bekleyip varsayılan odaya geri döner."""
+    """Kuyruktaki sıradaki şarkıyı indirip yerel olarak çalar (Sıfır Kesinti Garantili)."""
     g_data = music_queues.get(guild.id)
     if not g_data or not g_data["queue"]:
         if g_data:
@@ -2824,45 +2828,60 @@ async def play_next_song(guild: discord.Guild):
         else:
             search_target = f"scsearch:{track_query}"
 
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search_target, download=False))
+        # Şarkıyı yerel diskteki music_cache klasörüne hızlıca indir (0.3 saniye)
+        data = await loop.run_in_executor(None, lambda: ytdl_downloader.extract_info(search_target, download=True))
         
         info = None
         if data:
             if 'entries' in data and len(data['entries']) > 0:
                 info = data['entries'][0]
-            elif 'url' in data:
+            else:
                 info = data
 
-        if not info or not info.get('url'):
-            # Eğer scsearch bulamazsa ytsearch dene
+        if not info:
+            # Yedek: YouTube dene
             yt_target = f"ytsearch:{track_query}"
-            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(yt_target, download=False))
+            data = await loop.run_in_executor(None, lambda: ytdl_downloader.extract_info(yt_target, download=True))
             if data and 'entries' in data and len(data['entries']) > 0:
                 info = data['entries'][0]
-            elif data and 'url' in data:
+            elif data:
                 info = data
 
-        if not info or not info.get('url'):
-            raise RuntimeError(f"Ses kaynağı bulunamadı: {track_query}")
+        if not info:
+            raise RuntimeError(f"Şarkı indirilemedi: {track_query}")
 
-        url = info['url']
+        # İndirilen yerel dosyanın tam yolunu bul
+        file_path = ytdl_downloader.prepare_filename(info)
+        
+        # Eğer uzantı değişmişse (örn .opus veya .m4a) dosyayı bul
+        if not os.path.exists(file_path):
+            base, _ = os.path.splitext(file_path)
+            for ext in (".opus", ".m4a", ".mp3", ".webm", ".ogg", ".wav"):
+                if os.path.exists(base + ext):
+                    file_path = base + ext
+                    break
+
+        if not os.path.exists(file_path):
+            raise RuntimeError(f"Yerel ses dosyası bulunamadı: {file_path}")
+
         title = info.get('title', track_query)
         g_data["current"] = title
 
         def after_playing(error):
             if error:
                 print(f"⚠️ Çalma hatası: {error}", flush=True)
+            # Şarkı bittiğinde geçici dosyayı temizle
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception:
+                pass
             asyncio.run_coroutine_threadsafe(play_next_song(guild), bot.loop)
 
-        # Discord'un en kararlı ve kesintisiz native ses kaynağı: FFmpegOpusAudio
-        source = await discord.FFmpegOpusAudio.from_probe(
-            url,
-            executable=FFMPEG_EXE,
-            before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-            options='-vn'
-        )
+        # Yerel dosya üzerinden direkt PCM Audio (Sıfır internet kesintisi, sonuna kadar çalma)
+        source = discord.FFmpegPCMAudio(file_path, executable=FFMPEG_EXE, **FFMPEG_OPTIONS)
         vc.play(source, after=after_playing)
-        print(f"🎵 [Müzik] Çalıyor: {title}", flush=True)
+        print(f"🎵 [Müzik - Kesintisiz Yerel Çalma] Çalıyor: {title}", flush=True)
 
     except Exception as e:
         print(f"⚠️ Şarkı yüklenemedi ({track_query}): {e}", flush=True)
@@ -2941,7 +2960,7 @@ async def oynat_komutu(ctx, *, sorgu: str = None):
         msg = await ctx.send("YouTube taranıyor...")
         try:
             loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(sorgu, download=False))
+            data = await loop.run_in_executor(None, lambda: ytdl_downloader.extract_info(sorgu, download=False))
             if 'entries' in data:
                 # YouTube Playlist
                 entries = data['entries']
