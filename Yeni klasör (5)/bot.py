@@ -2683,14 +2683,8 @@ YTDL_OPTIONS = {
     'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
-    'default_search': 'ytsearch',
+    'default_search': 'scsearch',
     'source_address': '0.0.0.0',
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['ios', 'android'],
-            'player_skip': ['webpage', 'configs', 'js'],
-        }
-    }
 }
 
 import shutil
@@ -2822,31 +2816,35 @@ async def play_next_song(guild: discord.Guild):
 
     try:
         loop = asyncio.get_event_loop()
-        info = None
         
-        # 1. Öncelik: Belirtilen URL veya YouTube araması
-        search_target = track_query if ("youtube.com" in track_query or "youtu.be" in track_query or "http://" in track_query or "https://" in track_query) else f"ytsearch:{track_query}"
-        try:
-            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search_target, download=False))
-            if data:
-                if 'entries' in data and len(data['entries']) > 0:
-                    info = data['entries'][0]
-                elif 'url' in data:
-                    info = data
-        except Exception as yt_err:
-            print(f"⚠️ YouTube hatası: {yt_err} -> SoundCloud deneniyor...", flush=True)
+        # Doğrudan arama (Önce SoundCloud, eğer YouTube linki ise YouTube)
+        if "youtube.com" in track_query or "youtu.be" in track_query:
+            search_target = track_query
+        elif "soundcloud.com" in track_query or "http" in track_query:
+            search_target = track_query
+        else:
+            search_target = f"scsearch:{track_query}"
 
-        # 2. Yedek: YouTube bloklarsa SoundCloud üzerinden anında çek
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search_target, download=False))
+        
+        info = None
+        if data:
+            if 'entries' in data and len(data['entries']) > 0:
+                info = data['entries'][0]
+            elif 'url' in data:
+                info = data
+
         if not info or not info.get('url'):
-            sc_target = f"scsearch:{track_query}"
-            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(sc_target, download=False))
+            # Eğer scsearch bulamazsa ytsearch dene
+            yt_target = f"ytsearch:{track_query}"
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(yt_target, download=False))
             if data and 'entries' in data and len(data['entries']) > 0:
                 info = data['entries'][0]
             elif data and 'url' in data:
                 info = data
 
         if not info or not info.get('url'):
-            raise RuntimeError(f"Şarkı akış URL'si alınamadı: {track_query}")
+            raise RuntimeError(f"Ses kaynağı bulunamadı: {track_query}")
 
         url = info['url']
         title = info.get('title', track_query)
