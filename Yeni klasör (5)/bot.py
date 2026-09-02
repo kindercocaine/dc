@@ -2028,10 +2028,10 @@ class KomutlarView(discord.ui.View):
             p2 = discord.Embed(
                 title="🔨 Moderasyon & Ses Yetkisi Komutları",
                 description=(
-                    "- `.ban @kisi [sebep]` → Kullanıcıyı sunucudan banla\n"
-                    "- `.ban <id> [sebep]` → ID ile sunucudan banla\n"
-                    "- `.kick @kisi [sebep]` → Kullanıcıyı sunucudan at\n"
-                    "- `.kick <id> [sebep]` → ID ile sunucudan at\n"
+                    "- `.ban @kisi [sebep]` → (Özelden) Kullanıcıyı sunucudan banla\n"
+                    "- `.ban <id> [sebep]` → (Özelden) ID ile sunucudan banla\n"
+                    "- `.kick @kisi [sebep]` → (Özelden) Kullanıcıyı sunucudan at\n"
+                    "- `.kick <id> [sebep]` → (Özelden) ID ile sunucudan at\n"
                     "- `.nuke` → Bulunulan kanalı sıfırlar (tüm mesajları temizler)\n"
                     "- `.sestara` → Ses kanalları izinlerini yenile\n"
                     "- `sesyt ekle <id>` → (Özelden) Ses Yetkilisi ekle\n"
@@ -2159,10 +2159,16 @@ async def ses_tara(ctx):
 
 @bot.command(name="ban")
 async def ban(ctx, *, hedef: str = None):
-    """Kullanıcıyı banlar."""
-    if not is_authorized(ctx.author.id):
-        if ctx.guild:
+    """Kullanıcıyı banlar (SADECE ÖZELDEN ÇALIŞIR)."""
+    # Sunucuda yazıldıysa çalıştırma, mesajı anında sil
+    if ctx.guild is not None:
+        try:
             await ctx.message.delete()
+        except Exception:
+            pass
+        return
+
+    if not is_authorized(ctx.author.id):
         return
 
     if hedef is None:
@@ -2307,10 +2313,16 @@ async def ban(ctx, *, hedef: str = None):
 
 @bot.command(name="kick")
 async def kick(ctx, *, hedef: str = None):
-    """Kullanıcıyı atar."""
-    if not is_authorized(ctx.author.id):
-        if ctx.guild:
+    """Kullanıcıyı atar (SADECE ÖZELDEN ÇALIŞIR)."""
+    # Sunucuda yazıldıysa çalıştırma, mesajı anında sil
+    if ctx.guild is not None:
+        try:
             await ctx.message.delete()
+        except Exception:
+            pass
+        return
+
+    if not is_authorized(ctx.author.id):
         return
 
     if hedef is None:
