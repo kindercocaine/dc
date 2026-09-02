@@ -2977,7 +2977,7 @@ async def oynat_komutu(ctx, *, sorgu: str = None):
                     return
                 for child in self.children:
                     child.disabled = True
-                await interaction.response.edit_message(content=f"Sıraya eklendi (YouTube): **{self.query_text}**", view=self)
+                await interaction.response.edit_message(content=f"Sıraya eklendi: **{self.query_text}**", view=self)
                 g_queue.append(self.query_text)
                 if not vc.is_playing() and not vc.is_paused():
                     await play_next_song(ctx.guild)
@@ -2989,8 +2989,8 @@ async def oynat_komutu(ctx, *, sorgu: str = None):
                     return
                 for child in self.children:
                     child.disabled = True
-                await interaction.response.edit_message(content=f"Sıraya eklendi (Spotify Audio): **{self.query_text} (Spotify)**", view=self)
-                g_queue.append(f"{self.query_text} audio")
+                await interaction.response.edit_message(content=f"Sıraya eklendi: **{self.query_text}**", view=self)
+                g_queue.append(self.query_text)
                 if not vc.is_playing() and not vc.is_paused():
                     await play_next_song(ctx.guild)
 
@@ -3051,7 +3051,32 @@ async def devam_komutu(ctx):
         await ctx.send("Müzik devam ediyor.")
 
 
-@bot.command(name="kuyruk", aliases=["queue", "q", "liste", "sira", "sıra", "calan", "çalan", "sarki", "şarkı"])
+@bot.command(name="sarki", aliases=["şarkı", "muzik", "müzik", "music", "mhelp"])
+async def sarki_yardim_komutu(ctx):
+    """Müzik komutları listesini sade ve şık bir embed ile gösterir."""
+    embed = discord.Embed(
+        title="🎵 Müzik Komutları",
+        description=(
+            "**`.play <şarkı / link>`** (veya `.p`, `.oynat`)\n"
+            "↳ Şarkı adı, YouTube veya Spotify linki çalar.\n\n"
+            "**`.atla`** (veya `.skip`, `.s`)\n"
+            "↳ Çalan şarkıyı geçer, sıradakine atlar.\n\n"
+            "**`.durdur`** (veya `.pause`, `.dur`)\n"
+            "↳ Çalan müziği duraklatır.\n\n"
+            "**`.devam`** (veya `.resume`)\n"
+            "↳ Duraklatılan müziği devam ettirir.\n\n"
+            "**`.kuyruk`** (veya `.queue`, `.q`, `.sıra`, `.liste`)\n"
+            "↳ Sıradaki ve çalan şarkıları sayfalı gösterir.\n\n"
+            "**`.kuyruktemizle`** (veya `.clearqueue`)\n"
+            "↳ Müzik kuyruğunu tamamen temizler."
+        ),
+        color=0x1DB954
+    )
+    embed.set_footer(text="Spotify & YouTube & SoundCloud Destekli • Prefix: . veya !")
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="kuyruk", aliases=["queue", "q", "liste", "sira", "sıra", "calan", "çalan"])
 async def kuyruk_komutu(ctx):
     """
     Sıradaki ve şu an çalan şarkıları sayfalama butonlarıyla gösterir.
