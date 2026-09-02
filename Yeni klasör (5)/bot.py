@@ -2713,53 +2713,69 @@ def get_spotify_tracks(spotify_url: str) -> list[str]:
     """Spotify playlist/track/album sayfasından tüm şarkı ve sanatçı isimlerini %100 doğrulukla çeker."""
     tracks = []
     try:
-        # Spotify linkini normalize et
         clean_url = spotify_url.split("?")[0].strip()
-        # Embed URL'e çevir
-        if "open.spotify.com/embed/" not in clean_url:
-            embed_url = clean_url.replace("open.spotify.com/", "open.spotify.com/embed/")
-        else:
-            embed_url = clean_url
-
-        req = urllib.request.Request(
-            embed_url,
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
-        )
-        with urllib.request.urlopen(req, timeout=10) as response:
-            html = response.read().decode('utf-8')
-
-        # 1. Embed JSON __NEXT_DATA__ içinden tam listeyi çek
-        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html)
-        if m:
-            data = json.loads(m.group(1))
-            entity = data.get("props", {}).get("pageProps", {}).get("state", {}).get("data", {}).get("entity", {})
-            
-            # Playlist veya Album ise trackList vardır
-            track_list = entity.get("trackList", [])
-            if track_list:
-                for item in track_list:
-                    title = item.get("title", "")
-                    subtitle = item.get("subtitle", "")
-                    if title:
-                        query = f"{subtitle} - {title}".strip(" -") if subtitle else title
-                        tracks.append(query)
-            
-            # Tekil şarkı (Track) ise
-            elif entity.get("name") or entity.get("title"):
-                title = entity.get("title") or entity.get("name")
-                artists = entity.get("artists", [])
-                artist_names = ", ".join([a.get("name", "") for a in artists if a.get("name")])
-                query = f"{artist_names} - {title}".strip(" -") if artist_names else title
-                tracks.append(query)
-
-        # 2. Eğer Next data bulunamazsa resmi Spotify oEmbed API ile başlığı al
-        if not tracks:
+        
+        # 1. Öncelik: Spotify oEmbed API (En hızlı ve %100 çalışan resmi yöntem)
+        try:
             oembed_url = f"https://open.spotify.com/oembed?url={urllib.parse.quote(clean_url)}"
-            o_req = urllib.request.Request(oembed_url, headers={'User-Agent': 'Mozilla/5.0'})
+            o_req = urllib.request.Request(
+                oembed_url,
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
             with urllib.request.urlopen(o_req, timeout=5) as o_res:
                 o_data = json.loads(o_res.read().decode('utf-8'))
-                if o_data.get("title"):
-                    tracks.append(o_data["title"])
+                title = o_data.get("title")
+                if title:
+                    # oEmbed tekil track ise "Şarkı - Sanatçı" döner
+                    tracks.append(title)
+        except Exception:
+            pass
+
+        # 2. Eğer oEmbed tekil başlığı alamadıysa veya playlist/album ise web sayfasını tara
+        if not tracks or "playlist" in clean_url or "album" in clean_url:
+            embed_url = clean_url if "open.spotify.com/embed/" in clean_url else clean_url.replace("open.spotify.com/", "open.spotify.com/embed/")
+            req = urllib.request.Request(
+                embed_url,
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
+            )
+            with urllib.request.urlopen(req, timeout=8) as response:
+                html = response.read().decode('utf-8', errors='ignore')
+
+            # __NEXT_DATA__ JSON ayrıştırma
+            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html)
+            if m:
+                try:
+                    data = json.loads(m.group(1))
+                    entity = data.get("props", {}).get("pageProps", {}).get("state", {}).get("data", {}).get("entity", {})
+                    track_list = entity.get("trackList", [])
+                    if track_list:
+                        tracks.clear()
+                        for item in track_list:
+                            t_title = item.get("title", "")
+                            t_subtitle = item.get("subtitle", "")
+                            if t_title:
+                                query = f"{t_subtitle} - {t_title}".strip(" -") if t_subtitle else t_title
+                                tracks.append(query)
+                    elif not tracks:
+                        t_title = entity.get("title") or entity.get("name")
+                        artists = entity.get("artists", [])
+                        artist_names = ", ".join([a.get("name", "") for a in artists if a.get("name")])
+                        if t_title:
+                            query = f"{artist_names} - {t_title}".strip(" -") if artist_names else t_title
+                            tracks.append(query)
+                except Exception:
+                    pass
+
+            # OpenGraph Meta Etiketleri (Yedek)
+            if not tracks:
+                og_title = re.search(r'<meta property="og:title" content="([^"]+)"', html)
+                og_desc = re.search(r'<meta property="og:description" content="([^"]+)"', html)
+                if og_title:
+                    t_name = og_title.group(1)
+                    t_desc = og_desc.group(1) if og_desc else ""
+                    # Spotify bazen description kısmında sanatçıyı yazar
+                    query = f"{t_name} {t_desc}".strip()
+                    tracks.append(query)
 
     except Exception as e:
         print(f"⚠️ Spotify ayrıştırma hatası: {e}", flush=True)
@@ -2941,8 +2957,8 @@ async def oynat_komutu(ctx, *, sorgu: str = None):
         msg = await ctx.send("Spotify taranıyor...")
         tracks = get_spotify_tracks(sorgu)
         if not tracks:
-            g_queue.append(sorgu)
-            await msg.edit(content=f"Sıraya eklendi: **{sorgu}**")
+            await msg.edit(content="❌ Spotify linkindeki şarkı veya playlist bilgisi okunamadı! Lütfen şarkı adını yazarak deneyin: `.play Şarkı Adı`")
+            return
         elif len(tracks) == 1:
             g_queue.append(tracks[0])
             await msg.edit(content=f"Sıraya eklendi: **{tracks[0]}**")
@@ -2950,7 +2966,7 @@ async def oynat_komutu(ctx, *, sorgu: str = None):
             g_queue.extend(tracks)
             preview = ", ".join(tracks[:3])
             more = f" ve {len(tracks) - 3} şarkı daha" if len(tracks) > 3 else ""
-            await msg.edit(content=f"**{len(tracks)}** adet şarkı sıraya eklendi!\n`{preview}{more}`")
+            await msg.edit(content=f"**{len(tracks)}** adet şarkı Spotify'dan sıraya eklendi!\n`{preview}{more}`")
 
         if not vc.is_playing() and not vc.is_paused():
             await play_next_song(ctx.guild)
