@@ -2674,11 +2674,7 @@ from yt_dlp import YoutubeDL
 music_queues = {}
 
 YTDL_OPTIONS = {
-    'format': 'bestaudio[ext=m4a]/bestaudio/best',
-    'extractaudio': True,
-    'audioformat': 'opus',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-    'restrictfilenames': True,
+    'format': 'bestaudio/best',
     'noplaylist': True,
     'nocheckcertificate': True,
     'ignoreerrors': False,
@@ -2687,11 +2683,6 @@ YTDL_OPTIONS = {
     'no_warnings': True,
     'default_search': 'scsearch',
     'source_address': '0.0.0.0',
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'opus',
-        'preferredquality': '320',
-    }],
 }
 
 import shutil
@@ -2705,10 +2696,10 @@ if not FFMPEG_EXE:
     else:
         FFMPEG_EXE = "ffmpeg"
 
-# Yüksek Kaliteli Stüdyo Ses Ayarları & Kesintisiz Canlı Yayın Tamponu (Buffer)
+# Kesintisiz Canlı Yayın & Yüksek Kaliteli Ses Akışı
 FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10 -nostdin',
-    'options': '-vn -filter:a "volume=1.0" -ar 48000 -ac 2 -b:a 320k'
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn'
 }
 
 ytdl = YoutubeDL(YTDL_OPTIONS)
