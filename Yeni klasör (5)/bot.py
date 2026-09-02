@@ -902,11 +902,20 @@ async def ensure_voice_connection():
             guild = channel.guild
             vc = guild.voice_client
             
-            # Eğer bot şu an bir şarkı çalıyorsa veya müzik kuyruğundaysa ASLA odayı değiştirme!
+            # 1. Eğer müzik sistemi aktifse veya kullanıcı odada botla beraberse ASLA dokunma!
             g_data = music_queues.get(guild.id)
-            is_music_active = vc and (vc.is_playing() or vc.is_paused() or (g_data and (g_data.get("queue") or g_data.get("current"))))
-            if is_music_active:
+            if g_data and g_data.get("active_user_id"):
                 return
+            if vc and (vc.is_playing() or vc.is_paused()):
+                return
+            if g_data and (g_data.get("queue") or g_data.get("current")):
+                return
+
+            # 2. Eğer bot zaten bağlıysa ve bulunduğu kanalda başka üyeler varsa dokunma
+            if vc and vc.is_connected() and vc.channel.id != STAY_VOICE_CHANNEL_ID:
+                non_bot_members = [m for m in vc.channel.members if not m.bot]
+                if len(non_bot_members) > 0:
+                    return
 
             if not vc or not vc.is_connected():
                 await channel.connect(self_deaf=True, self_mute=False)
@@ -2679,9 +2688,9 @@ from yt_dlp import YoutubeDL
 music_queues = {}
 
 YTDL_OPTIONS = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio[ext=m4a]/bestaudio/best',
     'extractaudio': True,
-    'audioformat': 'mp3',
+    'audioformat': 'opus',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
     'noplaylist': True,
@@ -2692,6 +2701,11 @@ YTDL_OPTIONS = {
     'no_warnings': True,
     'default_search': 'scsearch',
     'source_address': '0.0.0.0',
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'opus',
+        'preferredquality': '320',
+    }],
 }
 
 import shutil
@@ -2705,9 +2719,10 @@ if not FFMPEG_EXE:
     else:
         FFMPEG_EXE = "ffmpeg"
 
+# Yüksek Kaliteli Stüdyo Ses Ayarları & Kesintisiz Canlı Yayın Tamponu (Buffer)
 FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10 -nostdin',
+    'options': '-vn -filter:a "volume=1.0" -ar 48000 -ac 2 -b:a 320k'
 }
 
 ytdl = YoutubeDL(YTDL_OPTIONS)
