@@ -2685,11 +2685,16 @@ YTDL_OPTIONS = {
     'no_warnings': True,
     'default_search': 'ytsearch',
     'source_address': '0.0.0.0',
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android', 'ios', 'mweb', 'web'],
+        }
+    }
 }
 
 import shutil
 
-# FFmpeg yolunu otomatik bul (Sistem PATH veya WinGet dizininden)
+# FFmpeg yolunu otomatik bul (Linux sistem ffmpeg veya Windows PATH / WinGet)
 FFMPEG_EXE = shutil.which("ffmpeg")
 if not FFMPEG_EXE:
     winget_ffmpeg = r"C:\Users\biber\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0.1-full_build\bin\ffmpeg.exe"
