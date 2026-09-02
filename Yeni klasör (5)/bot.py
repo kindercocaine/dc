@@ -2687,7 +2687,8 @@ YTDL_OPTIONS = {
     'source_address': '0.0.0.0',
     'extractor_args': {
         'youtube': {
-            'player_client': ['android', 'ios', 'mweb', 'web'],
+            'player_client': ['ios', 'android'],
+            'player_skip': ['webpage', 'configs', 'js'],
         }
     }
 }
@@ -2821,13 +2822,31 @@ async def play_next_song(guild: discord.Guild):
 
     try:
         loop = asyncio.get_event_loop()
-        # Eğer doğrudan YouTube linki ise direkt al, değilse ytsearch yap
+        info = None
+        
+        # 1. Öncelik: Belirtilen URL veya YouTube araması
         search_target = track_query if ("youtube.com" in track_query or "youtu.be" in track_query or "http://" in track_query or "https://" in track_query) else f"ytsearch:{track_query}"
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search_target, download=False))
-        if 'entries' in data and len(data['entries']) > 0:
-            info = data['entries'][0]
-        else:
-            info = data
+        try:
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search_target, download=False))
+            if data:
+                if 'entries' in data and len(data['entries']) > 0:
+                    info = data['entries'][0]
+                elif 'url' in data:
+                    info = data
+        except Exception as yt_err:
+            print(f"⚠️ YouTube hatası: {yt_err} -> SoundCloud deneniyor...", flush=True)
+
+        # 2. Yedek: YouTube bloklarsa SoundCloud üzerinden anında çek
+        if not info or not info.get('url'):
+            sc_target = f"scsearch:{track_query}"
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(sc_target, download=False))
+            if data and 'entries' in data and len(data['entries']) > 0:
+                info = data['entries'][0]
+            elif data and 'url' in data:
+                info = data
+
+        if not info or not info.get('url'):
+            raise RuntimeError(f"Şarkı akış URL'si alınamadı: {track_query}")
 
         url = info['url']
         title = info.get('title', track_query)
