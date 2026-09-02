@@ -2854,7 +2854,13 @@ async def play_next_song(guild: discord.Guild):
                 print(f"⚠️ Çalma hatası: {error}", flush=True)
             asyncio.run_coroutine_threadsafe(play_next_song(guild), bot.loop)
 
-        source = discord.FFmpegPCMAudio(url, executable=FFMPEG_EXE, **FFMPEG_OPTIONS)
+        # Discord'un en kararlı ve kesintisiz native ses kaynağı: FFmpegOpusAudio
+        source = await discord.FFmpegOpusAudio.from_probe(
+            url,
+            executable=FFMPEG_EXE,
+            before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+            options='-vn'
+        )
         vc.play(source, after=after_playing)
         print(f"🎵 [Müzik] Çalıyor: {title}", flush=True)
 
