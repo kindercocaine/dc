@@ -895,12 +895,19 @@ async def auto_repair_loop():
 STAY_VOICE_CHANNEL_ID = 1532596503447867434  # Botun 7/24 kalacağı ses kanalı
 
 async def ensure_voice_connection():
-    """Botun belirlenen ses kanalında (1532596503447867434) sağırlaştırılmış ama mikrofonu açık şekilde kalmasını sağlar."""
+    """Botun belirlenen ses kanalında (1532596503447867434) kalmasını sağlar (Müzik çalmıyorsa)."""
     try:
         channel = bot.get_channel(STAY_VOICE_CHANNEL_ID)
         if channel and isinstance(channel, discord.VoiceChannel):
             guild = channel.guild
             vc = guild.voice_client
+            
+            # Eğer bot şu an bir şarkı çalıyorsa veya müzik kuyruğundaysa ASLA odayı değiştirme!
+            g_data = music_queues.get(guild.id)
+            is_music_active = vc and (vc.is_playing() or vc.is_paused() or (g_data and (g_data.get("queue") or g_data.get("current"))))
+            if is_music_active:
+                return
+
             if not vc or not vc.is_connected():
                 await channel.connect(self_deaf=True, self_mute=False)
                 print(f"🔊 [Ses Odası] Bot #{channel.name} (`{channel.id}`) kanalına bağlandı (Kulaklık kapalı, mikrofon açık).", flush=True)
