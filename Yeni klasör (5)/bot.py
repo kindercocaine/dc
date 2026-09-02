@@ -2715,7 +2715,7 @@ def get_spotify_tracks(spotify_url: str) -> list[str]:
     try:
         clean_url = spotify_url.split("?")[0].strip()
         
-        # 1. Öncelik: Spotify oEmbed API (En hızlı ve %100 çalışan resmi yöntem)
+        # 1. Öncelik: Spotify oEmbed API (Sanatçı + Şarkı Adını tam eşleştirir)
         try:
             oembed_url = f"https://open.spotify.com/oembed?url={urllib.parse.quote(clean_url)}"
             o_req = urllib.request.Request(
@@ -2724,10 +2724,15 @@ def get_spotify_tracks(spotify_url: str) -> list[str]:
             )
             with urllib.request.urlopen(o_req, timeout=5) as o_res:
                 o_data = json.loads(o_res.read().decode('utf-8'))
-                title = o_data.get("title")
+                title = o_data.get("title", "")
+                author = o_data.get("author_name", "") or o_data.get("author", "")
+                
                 if title:
-                    # oEmbed tekil track ise "Şarkı - Sanatçı" döner
-                    tracks.append(title)
+                    if author and author.lower() not in title.lower():
+                        full_query = f"{author} - {title}"
+                    else:
+                        full_query = title
+                    tracks.append(full_query)
         except Exception:
             pass
 
@@ -2773,7 +2778,6 @@ def get_spotify_tracks(spotify_url: str) -> list[str]:
                 if og_title:
                     t_name = og_title.group(1)
                     t_desc = og_desc.group(1) if og_desc else ""
-                    # Spotify bazen description kısmında sanatçıyı yazar
                     query = f"{t_name} {t_desc}".strip()
                     tracks.append(query)
 
